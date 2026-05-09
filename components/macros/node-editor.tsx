@@ -347,6 +347,7 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
       <Handle
         type="target"
         position={Position.Top}
+        id="exec-in"
         className="!w-3 !h-3 !border-2 !bg-gray-700 !border-white/40"
       />
 
@@ -394,6 +395,7 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
       <Handle
         type="source"
         position={Position.Bottom}
+        id="exec-out"
         className="!w-3 !h-3 !border-2 !bg-gray-700 !border-white/40"
       />
       {/* Condition: two labelled handles */}
@@ -782,7 +784,10 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         (connection.sourceHandle?.startsWith('data-out-') ?? false) &&
         (connection.targetHandle?.startsWith('data-in-') ?? false)
       const isExecutionConnection =
-        !connection.sourceHandle && !connection.targetHandle
+        (connection.sourceHandle === 'exec-out' || connection.sourceHandle === null || connection.sourceHandle === undefined) &&
+        (connection.targetHandle === 'exec-in' || connection.targetHandle === null || connection.targetHandle === undefined) &&
+        !connection.sourceHandle?.startsWith('data-out-') &&
+        !connection.targetHandle?.startsWith('data-in-')
 
       // Validate: don't mix data and execution handles
       if (!isDataConnection && !isExecutionConnection) return
