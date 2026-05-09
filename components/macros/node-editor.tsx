@@ -16,6 +16,8 @@ import {
   type Edge,
   type Connection,
   type OnNodesChange,
+  Handle,
+  Position,
   type OnEdgesChange,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -285,14 +287,21 @@ const categoryColors: Record<NodeCategory, string> = {
 }
 
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
+  const isCondition = data.type === 'condition'
   return (
     <Card
       className={cn(
-        'min-w-[160px] px-3 py-2 shadow-md border-l-4',
+        'min-w-[160px] px-3 py-2 shadow-md border-l-4 relative',
         categoryColors[data.category] || 'border-l-blue-500',
         selected && 'ring-2 ring-primary'
       )}
     >
+      {/* Target handle */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!w-3 !h-3 !border-2 !bg-gray-700 !border-white/40"
+      />
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <div>
@@ -302,10 +311,42 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
           </div>
         </div>
       </div>
+      {/* Source handle */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!w-3 !h-3 !border-2 !bg-gray-700 !border-white/40"
+      />
+      {/* Condition: two labelled handles */}
+      {isCondition && (
+        <>
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="true"
+            className="!w-3 !h-3 !border-2 !bg-green-600 !border-green-300"
+            style={{ left: '40%' }}
+          />
+          <div className="absolute text-[9px] font-bold text-green-400"
+            style={{ bottom: -16, left: '37%' }}>
+            ✓
+          </div>
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id="false"
+            className="!w-3 !h-3 !border-2 !bg-red-600 !border-red-300"
+            style={{ left: '60%' }}
+          />
+          <div className="absolute text-[9px] font-bold text-red-400"
+            style={{ bottom: -16, left: '57%' }}>
+            ✗
+          </div>
+        </>
+      )}
     </Card>
   )
 }
-
 const nodeTypes = {
   macroNode: MacroNodeComponent,
 }
@@ -629,280 +670,331 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   const esc = (s: string) => s.replace(/"/g, '\\"')
   const escBlock = (s: string) => s.replace(/`/g, '\\`').replace(/\$/g, '\\$')
 
-  // ─── Export to Code ─────────────────────────────────────
+  // ─── Export to Code ─────────────────────
   const exportCode = useCallback(() => {
-    const edgeMap = new Map<string, string[]>()
-    const inDegree = new Map<string, number>()
-    nodes.forEach((n) => {
-      edgeMap.set(n.id, [])
-      inDegree.set(n.id, 0)
-    })
-    edges.forEach((e) => {
-      edgeMap.get(e.source)?.push(e.target)
-      inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1)
-    })
-
-    const queue: string[] = []
-    const sorted: string[] = []
-    inDegree.forEach((deg, id) => {
-      if (deg === 0) queue.push(id)
-    })
-    while (queue.length > 0) {
-      const id = queue.shift()!
-      sorted.push(id)
-      edgeMap.get(id)?.forEach((target) => {
-        const newDeg = (inDegree.get(target) || 1) - 1
-        inDegree.set(target, newDeg)
-        if (newDeg === 0) queue.push(target)
-      })
-    }
-
-    const lines: string[] = []
-    lines.push(`// Generated from node graph: ${macroName || 'Untitled Macro'}`)
-    lines.push('// Requires a selected token on the canvas')
-    lines.push('')
-
+    // edgeMap with handle-aware connections
+    const edgeMap = new Map<string, { target: string; handle: string | null | undefined }[]>()
     const nodeMap = new Map(nodes.map((n) => [n.id, n]))
+    nodes.forEach((n) => edgeMap.set(n.id, []))
+    edges.forEach((e) => {
+      edgeMap.get(e.source)?.push({ target: e.target, handle: e.sourceHandle })
+    })
 
-    for (const id of sorted) {
-      const node = nodeMap.get(id)
-      if (!node) continue
+    const visited = new Set<string>()
+
+    function generateNodeLines(nodeId: string, lines: string[], depth = 0): void {
+      if (visited.has(nodeId)) return
+      visited.add(nodeId)
+
+      const node = nodeMap.get(nodeId)
+      if (!node) return
 
       const d = node.data
-      const modId = String(d.moduleId || '')
+      const indent = '  '.repeat(depth)
 
-      // Module-mapped node — use generateCode from mapping
+      if ((d.type as string).startsWith('_')) return
+
+      // Module-mapped nodes
+      const modId = String(d.moduleId || '')
       if (d.category === 'module' && modId) {
         const mapping = getModuleMapping(modId)
         if (mapping) {
           const nodeDef = mapping.nodes.find((n) => n.type === d.type)
           if (nodeDef) {
-            // Build data record from node's data
             const data: Record<string, string> = {}
             for (const prop of nodeDef.properties) {
               data[prop.key] = String(d[prop.key] ?? '')
             }
-            const codeLines = nodeDef.generateCode(data)
-            for (const cl of codeLines) {
-              lines.push(cl)
+            for (const cl of nodeDef.generateCode(data)) {
+              lines.push(indent + cl)
             }
-            continue
+            for (const edge of edgeMap.get(nodeId) || []) {
+              if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+            }
+            return
           }
         }
-        // Unknown module type — just add a comment
-        lines.push(`// Module: ${d.label} (${modId})`)
-        lines.push(`// TODO: Add API calls for this module action`)
-        lines.push('')
-        continue
+        lines.push(indent + '// Module: ' + d.label + ' (' + modId + ')')
+        lines.push(indent + '// TODO: Add API calls for this module action')
+        return
       }
-
-      // Internal / section header nodes — skip
-      if (d.type.startsWith('_')) continue
 
       // Built-in node types
       switch (d.type) {
         case 'rollDice': {
           const formula = d.formula || '1d20'
-          lines.push(`// Roll Dice: ${formula}`)
-          lines.push(`const roll = await game.dice.roll("${esc(formula)}")`)
-          lines.push('await roll.evaluate({ async: true })')
-          if (d.flavor) lines.push(`roll.toMessage({ flavor: "${esc(d.flavor)}" })`)
-          lines.push('const rollResult = roll.total')
-          lines.push('')
+          lines.push(indent + '// Roll Dice: ' + formula)
+          lines.push(indent + 'const roll = await game.dice.roll("' + esc(formula) + '")')
+          lines.push(indent + 'await roll.evaluate({ async: true })')
+          if (d.flavor) lines.push(indent + 'roll.toMessage({ flavor: "' + esc(d.flavor) + '" })')
+          lines.push(indent + 'const rollResult = roll.total')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'dealDamage': {
           const amount = d.amount || '10'
-          lines.push('// Deal Damage')
-          lines.push('if (token) {')
-          lines.push(`  const cur = token.actor.system.attributes.hp.value`)
-          lines.push(`  const newHp = Math.max(0, cur - ${parseInt(amount) || 10})`)
-          lines.push('  await token.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(`  ChatMessage.create({ content: \`\${token.name} takes ${esc(amount)} damage.\` })`)
-          lines.push('}')
-          lines.push('')
+          const dmgAmt = parseInt(amount) || 10
+          lines.push(indent + '// Deal Damage')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  const cur = token.actor.system.attributes.hp.value')
+          lines.push(indent + '  const newHp = Math.max(0, cur - ' + dmgAmt + ')')
+          lines.push(indent + '  await token.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: token.name + " takes ' + esc(String(dmgAmt)) + ' damage." })')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'healTarget': {
           const amount = d.amount || '10'
-          lines.push('// Heal Target')
-          lines.push('if (token) {')
-          lines.push(`  const cur = token.actor.system.attributes.hp.value`)
-          lines.push(`  const max = token.actor.system.attributes.hp.max`)
-          lines.push(`  const newHp = Math.min(max, cur + ${parseInt(amount) || 10})`)
-          lines.push('  await token.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(`  ChatMessage.create({ content: \`\${token.name} heals for ${esc(amount)}.\` })`)
-          lines.push('}')
-          lines.push('')
+          const healAmt = parseInt(amount) || 10
+          lines.push(indent + '// Heal Target')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  const cur = token.actor.system.attributes.hp.value')
+          lines.push(indent + '  const max = token.actor.system.attributes.hp.max')
+          lines.push(indent + '  const newHp = Math.min(max, cur + ' + healAmt + ')')
+          lines.push(indent + '  await token.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: token.name + " heals for ' + esc(String(healAmt)) + '." })')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'sendChat': {
           const content = String(d.content || '')
           const mode = d.mode === 'IC' ? 'IC' : 'OOC'
-          lines.push('// Send Chat Message')
-          lines.push('ChatMessage.create({')
-          lines.push(`  content: "${esc(content)}",`)
-          lines.push(`  type: CONST.CHAT_MESSAGE_TYPES.${mode},`)
-          lines.push('})')
-          lines.push('')
+          lines.push(indent + '// Send Chat Message')
+          lines.push(indent + 'ChatMessage.create({')
+          lines.push(indent + '  content: "' + esc(content) + '",')
+          lines.push(indent + '  type: CONST.CHAT_MESSAGE_TYPES.' + mode + ',')
+          lines.push(indent + '})')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'applyEffect': {
           const effectName = String(d.effectName || '')
           const dur = d.amount || '60'
-          lines.push('// Apply Effect')
-          lines.push('if (token) {')
-          lines.push('  const effectData = {')
-          lines.push(`    label: "${esc(effectName)}",`)
-          lines.push('    origin: token.actor.uuid,')
-          lines.push(`    duration: { seconds: ${parseInt(dur) || 60} }`)
-          lines.push('  }')
-          lines.push('  await token.actor.createEmbeddedDocuments("ActiveEffect", [effectData])')
-          lines.push('}')
-          lines.push('')
+          lines.push(indent + '// Apply Effect')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  const effectData = {')
+          lines.push(indent + '    label: "' + esc(effectName) + '",')
+          lines.push(indent + '    origin: token.actor.uuid,')
+          lines.push(indent + '    duration: { seconds: ' + (parseInt(dur) || 60) + ' }')
+          lines.push(indent + '  }')
+          lines.push(indent + '  await token.actor.createEmbeddedDocuments("ActiveEffect", [effectData])')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'applyStatus': {
           const statusId = String(d.statusId || 'poisoned')
           const statusLabel = String(d.statusLabel || statusId)
-          lines.push(`// Apply Status: ${statusLabel}`)
-          lines.push('if (token) {')
-          lines.push(`  const status = CONFIG.statusEffects.find(s => s.id === "${esc(statusId)}")`)
-          lines.push('  if (status) {')
-          lines.push(
-            `    await token.actor.toggleStatusEffect("${esc(statusId)}", { active: true })`
-          )
-          lines.push('  }')
-          lines.push('}')
-          lines.push('')
+          lines.push(indent + '// Apply Status: ' + statusLabel)
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  const status = CONFIG.statusEffects.find(s => s.id === "' + esc(statusId) + '")')
+          lines.push(indent + '  if (status) {')
+          lines.push(indent + '    await token.actor.toggleStatusEffect("' + esc(statusId) + '", { active: true })')
+          lines.push(indent + '  }')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'condition': {
           const cond = String(d.condition || 'true')
           const trueLabel = String(d.trueLabel || 'True')
-          lines.push(`// Condition: ${cond}`)
-          lines.push(`if (${cond}) {`)
-          lines.push(`  // ${trueLabel} path`)
-          lines.push('  // Connected nodes execute here')
-          lines.push('}')
-          lines.push('')
+          lines.push(indent + '// Condition: ' + cond)
+          lines.push(indent + 'if (' + cond + ') {')
+          const trueEdges = (edgeMap.get(nodeId) || []).filter((e) => e.handle === 'true')
+          for (const te of trueEdges) {
+            generateNodeLines(te.target, lines, depth + 1)
+          }
+          const falseEdges = (edgeMap.get(nodeId) || []).filter((e) => e.handle === 'false')
+          if (falseEdges.length > 0) {
+            lines.push(indent + '} else {')
+            for (const fe of falseEdges) {
+              generateNodeLines(fe.target, lines, depth + 1)
+            }
+          }
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'variable': {
           const varName = String(d.name || 'myVar')
           const varValue = String(d.value || 'undefined')
-          lines.push(`// Variable: ${varName}`)
-          lines.push(`const ${varName} = ${varValue}`)
-          lines.push('')
+          lines.push(indent + '// Variable: ' + varName)
+          lines.push(indent + 'const ' + varName + ' = ' + varValue)
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'runMacro': {
           const macroName = d.macroName || ''
           const macroUuid = d.macroUuid || ''
-          lines.push(`// Run Macro: ${macroName}`)
+          lines.push(indent + '// Run Macro: ' + macroName)
           if (macroUuid) {
-            lines.push(`game.macros.get("${esc(macroUuid)}")?.execute()`)
+            lines.push(indent + 'game.macros.get("' + esc(macroUuid) + '")?.execute()')
           } else if (macroName) {
-            lines.push(`game.macros.getName("${esc(macroName)}")?.execute()`)
+            lines.push(indent + 'game.macros.getName("' + esc(macroName) + '")?.execute()')
           }
-          lines.push('')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'abilityCheck': {
           const ability = d.ability || 'str'
-          const flavors = d.flavor ? `, { flavor: "${esc(d.flavor)}" }` : ''
-          lines.push(`// Ability Check: ${ability.toUpperCase()}`)
-          lines.push('if (token) {')
-          lines.push(`  await token.actor.rollAbilityTest("${esc(ability)}"${flavors})`)
-          lines.push('}')
-          lines.push('')
+          const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
+          lines.push(indent + '// Ability Check: ' + ability.toUpperCase())
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  await token.actor.rollAbilityTest("' + esc(ability) + '"' + flavors + ')')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'skillCheck': {
           const skill = d.skill || 'prc'
-          const flavors = d.flavor ? `, { flavor: "${esc(d.flavor)}" }` : ''
-          lines.push(`// Skill Check: ${skill}`)
-          lines.push('if (token) {')
-          lines.push(`  await token.actor.rollSkill("${esc(skill)}"${flavors})`)
-          lines.push('}')
-          lines.push('')
+          const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
+          lines.push(indent + '// Skill Check: ' + skill.toUpperCase())
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  await token.actor.rollSkill("' + esc(skill) + '"' + flavors + ')')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'concentrationSave': {
           const dmg = d.damageAmount || '10'
-          lines.push(`// Concentration Save (DC ${dmg})`)
-          lines.push('if (token) {')
-          lines.push(`  await token.actor.rollConcentrationSave(${parseInt(dmg) || 10})`)
-          lines.push('}')
-          lines.push('')
+          const dc = parseInt(dmg) || 10
+          lines.push(indent + '// Concentration Save (DC ' + dc + ')')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  await token.actor.rollConcentrationSave(' + dc + ')')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'deathSave': {
-          lines.push('// Death Save')
-          lines.push('if (token) {')
-          lines.push('  await token.actor.rollDeathSave({})')
-          lines.push('}')
-          lines.push('')
+          lines.push(indent + '// Death Save')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  await token.actor.rollDeathSave({})')
+          lines.push(indent + '}')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'rollTable': {
           const tableName = d.tableName || ''
-          lines.push(`// Roll Table: ${tableName}`)
+          lines.push(indent + '// Roll Table: ' + tableName)
           if (tableName) {
-            lines.push(`const table = game.tables.getName("${esc(tableName)}")`)
-            lines.push('if (table) {')
-            lines.push('  await table.roll()')
-            lines.push('}')
+            lines.push(indent + 'const table = game.tables.getName("' + esc(tableName) + '")')
+            lines.push(indent + 'if (table) {')
+            lines.push(indent + '  await table.roll()')
+            lines.push(indent + '}')
           }
-          lines.push('')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'playSound': {
           const playlistName = d.playlistName || ''
           const soundName = d.soundName || ''
-          lines.push(`// Play Sound`)
+          lines.push(indent + '// Play Sound')
           if (playlistName && soundName) {
-            lines.push(`const playlist = game.playlists.getName("${esc(playlistName)}")`)
-            lines.push('if (playlist) {')
-            lines.push(
-              `  const sound = playlist.sounds.getName("${esc(soundName)}")`
-            )
-            lines.push('  if (sound) sound.play()')
-            lines.push('}')
+            lines.push(indent + 'const playlist = game.playlists.getName("' + esc(playlistName) + '")')
+            lines.push(indent + 'if (playlist) {')
+            lines.push(indent + '  const sound = playlist.sounds.getName("' + esc(soundName) + '")')
+            lines.push(indent + '  if (sound) sound.play()')
+            lines.push(indent + '}')
           } else if (playlistName) {
-            lines.push(`const playlist = game.playlists.getName("${esc(playlistName)}")`)
-            lines.push('if (playlist) {')
-            lines.push('  playlist.play()')
-            lines.push('}')
+            lines.push(indent + 'const playlist = game.playlists.getName("' + esc(playlistName) + '")')
+            lines.push(indent + 'if (playlist) {')
+            lines.push(indent + '  playlist.play()')
+            lines.push(indent + '}')
           }
-          lines.push('')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
         }
         case 'toggleScene': {
           const sceneName = d.sceneName || ''
-          lines.push(`// Toggle Scene: ${sceneName}`)
+          lines.push(indent + '// Toggle Scene: ' + sceneName)
           if (sceneName) {
-            lines.push(`const scene = game.scenes.getName("${esc(sceneName)}")`)
-            lines.push('if (scene) {')
-            lines.push('  await scene.activate()')
-            lines.push('}')
+            lines.push(indent + 'const scene = game.scenes.getName("' + esc(sceneName) + '")')
+            lines.push(indent + 'if (scene) {')
+            lines.push(indent + '  await scene.activate()')
+            lines.push(indent + '}')
           } else if (d.sceneId) {
-            lines.push(`const scene = game.scenes.get("${esc(d.sceneId)}")`)
-            lines.push('if (scene) {')
-            lines.push('  await scene.activate()')
-            lines.push('}')
+            lines.push(indent + 'const scene = game.scenes.get("' + esc(d.sceneId) + '")')
+            lines.push(indent + 'if (scene) {')
+            lines.push(indent + '  await scene.activate()')
+            lines.push(indent + '}')
           }
-          lines.push('')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
           break
+        }
+        default: {
+          lines.push(indent + '// Unknown node: ' + d.label + ' (' + d.type + ')')
+          for (const edge of edgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
         }
       }
     }
 
+    const lines: string[] = []
+    lines.push('// Generated from node graph: ' + (macroName || 'Untitled Macro'))
+    lines.push('// Requires a selected token on the canvas')
+    lines.push('')
+
+    const hasIncoming = new Set<string>()
+    edges.forEach((e) => hasIncoming.add(e.target))
+    const roots = nodes
+      .filter((n) => !hasIncoming.has(n.id) && !(n.data.type as string).startsWith('_'))
+      .map((n) => n.id)
+
+    const allNonHeader = nodes
+      .filter((n) => !(n.data.type as string).startsWith('_'))
+      .map((n) => n.id)
+
+    for (const rootId of roots) {
+      visited.clear()
+      generateNodeLines(rootId, lines)
+    }
+
+    if (roots.length === 0) {
+      for (const nid of allNonHeader) {
+        visited.clear()
+        generateNodeLines(nid, lines)
+      }
+    }
+
     lines.push('// End of macro')
-    onCodeGenerated(lines.join('\n'))
+    onCodeGenerated(lines.join('\\n'))
     toast.success('Code generated from node graph')
   }, [nodes, edges, macroName, onCodeGenerated])
-
   const selectedNodeData = selectedNode
     ? nodes.find((n) => n.id === selectedNode)?.data ?? null
     : null
