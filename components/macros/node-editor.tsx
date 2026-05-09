@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import {
   ReactFlow,
   addEdge,
@@ -24,30 +24,46 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { Code, Trash2, GripVertical } from 'lucide-react'
+import { Code, Trash2, GripVertical, Loader2, ChevronDown, ChevronRight, Blocks } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { relay } from '@/lib/relay'
 
 // ─── Types ──────────────────────────────────────────────────
 
-type NodeCategory = 'action' | 'logic' | 'data'
+type NodeCategory = 'action' | 'logic' | 'data' | 'macro'
 
 interface CustomNodeData {
   type: string
   label: string
   category: NodeCategory
   description: string
+  // roll dice
   formula?: string
   flavor?: string
+  // send chat
   content?: string
   mode?: string
+  // apply effect
   effectName?: string
-  target?: string
+  // condition
   condition?: string
   trueLabel?: string
   falseLabel?: string
+  // variable
   name?: string
   value?: string
+  // run macro
   macroName?: string
+  macroUuid?: string
+  // deal damage / heal
+  target?: string
+  amount?: string
+  // ability / skill check
+  ability?: string
+  skill?: string
+  // toggle scene
+  sceneName?: string
+  sceneId?: string
   [key: string]: unknown
 }
 
@@ -62,24 +78,53 @@ interface PaletteItem {
   defaultData: Partial<CustomNodeData>
 }
 
-const paletteItems: PaletteItem[] = [
+interface RemoteMacro {
+  uuid: string
+  id: string
+  name: string
+  type: string
+  command: string
+  scope: string
+  img?: string
+}
+
+// ─── Static palette items ───────────────────────────────────
+
+const staticPaletteItems: PaletteItem[] = [
+  // Actions
   { type: 'rollDice', label: 'Roll Dice', category: 'action', description: 'Roll a dice formula', defaultData: { formula: '1d20', flavor: '' } },
+  { type: 'dealDamage', label: 'Deal Damage', category: 'action', description: 'Deal damage to selected token', defaultData: { target: 'selected', amount: '10' } },
+  { type: 'healTarget', label: 'Heal Target', category: 'action', description: 'Heal selected token', defaultData: { target: 'selected', amount: '10' } },
   { type: 'sendChat', label: 'Send Chat', category: 'action', description: 'Send a message to chat', defaultData: { content: 'Hello!', mode: 'OOC' } },
-  { type: 'applyEffect', label: 'Apply Effect', category: 'action', description: 'Apply an active effect', defaultData: { effectName: '', target: '' } },
+  { type: 'applyEffect', label: 'Apply Effect', category: 'action', description: 'Apply an active effect', defaultData: { effectName: 'Burning', target: 'selected', amount: '60' } },
+  { type: 'abilityCheck', label: 'Ability Check', category: 'action', description: 'Roll an ability check', defaultData: { ability: 'str', flavor: '' } },
+  { type: 'skillCheck', label: 'Skill Check', category: 'action', description: 'Roll a skill check', defaultData: { skill: 'prc', flavor: '' } },
+  // Logic
   { type: 'condition', label: 'Condition', category: 'logic', description: 'If/else branching', defaultData: { condition: 'true', trueLabel: 'True', falseLabel: 'False' } },
+  // Data
   { type: 'variable', label: 'Variable', category: 'data', description: 'Set or get a variable', defaultData: { name: 'myVar', value: '' } },
-  { type: 'runMacro', label: 'Run Macro', category: 'action', description: 'Execute another macro', defaultData: { macroName: '' } },
 ]
 
+interface PaletteSection {
+  title: string
+  icon?: React.ReactNode
+  items: PaletteItem[]
+}
+
 // ─── Node Component ─────────────────────────────────────────
+
+const categoryColors: Record<NodeCategory, string> = {
+  action: 'border-l-blue-500',
+  logic: 'border-l-amber-500',
+  data: 'border-l-green-500',
+  macro: 'border-l-purple-500',
+}
 
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
   return (
     <Card className={cn(
       'min-w-[160px] px-3 py-2 shadow-md border-l-4',
-      data.category === 'action' ? 'border-l-blue-500' :
-      data.category === 'logic' ? 'border-l-amber-500' :
-      'border-l-green-500',
+      categoryColors[data.category] || 'border-l-blue-500',
       selected && 'ring-2 ring-primary'
     )}>
       <div className="flex items-center gap-2">
@@ -116,6 +161,83 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   const [nodes, setNodes, onNodesChange] = useNodesState<MacroNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<MacroEdge>([])
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
+  const [remoteMacros, setRemoteMacros] = useState<RemoteMacro[]>([])
+  const [loadingMacros, setLoadingMacros] = useState(true)
+  const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({})
+
+  // ─── Fetch macros from relay ────────────────────────────
+  useEffect(() => {
+    let mounted = true
+    setLoadingMacros(true)
+    relay.getMacros()
+      .then((data) => {
+        if (!mounted) return
+        const raw: unknown[] = data && 'macros' in (data as object)
+          ? ((data as Record<string, unknown>).macros as unknown[])
+          : data && 'data' in (data as object)
+            ? ((data as Record<string, unknown>).data as unknown[])
+            : Array.isArray(data) ? data : []
+        const macros: RemoteMacro[] = raw.map((m) => {
+          const r = m as Record<string, unknown>
+          return {
+            uuid: (r.uuid as string) || (r._id as string) || '',
+            id: (r.id as string) || '',
+            name: (r.name as string) || '',
+            type: (r.type as string) || 'script',
+            command: (r.command as string) || '',
+            scope: (r.scope as string) || 'global',
+            img: r.img as string | undefined,
+          }
+        }).filter((m) => m.uuid)
+        setRemoteMacros(macros)
+        setLoadingMacros(false)
+      })
+      .catch(() => {
+        if (mounted) {
+          setRemoteMacros([])
+          setLoadingMacros(false)
+        }
+      })
+    return () => { mounted = false }
+  }, [])
+
+  // ─── Build palette sections ─────────────────────────────
+  const paletteSections: PaletteSection[] = [
+    {
+      title: 'Actions',
+      items: staticPaletteItems.filter((i) => i.category === 'action'),
+    },
+    {
+      title: 'Logic',
+      items: staticPaletteItems.filter((i) => i.category === 'logic'),
+    },
+    {
+      title: 'Data',
+      items: staticPaletteItems.filter((i) => i.category === 'data'),
+    },
+  ]
+
+  if (remoteMacros.length > 0) {
+    paletteSections.push({
+      title: `Foundry Macros (${remoteMacros.length})`,
+      icon: <Blocks className="h-3 w-3 text-purple-500" />,
+      items: remoteMacros.map((m) => ({
+        type: 'runMacro',
+        label: m.name,
+        category: 'macro' as NodeCategory,
+        description: `Run "${m.name}"`,
+        defaultData: {
+          macroName: m.name,
+          macroUuid: m.uuid,
+          description: `Execute: ${m.name}`,
+        },
+      })),
+    })
+  }
+
+  const toggleSection = (title: string) => {
+    setSectionsCollapsed((prev) => ({ ...prev, [title]: !prev[title] }))
+  }
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
@@ -161,6 +283,10 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     )
   }, [setNodes])
 
+  // ─── Sanitize helpers ───────────────────────────────────
+  const esc = (s: string) => s.replace(/"/g, '\\"')
+  const escBlock = (s: string) => s.replace(/`/g, '\\`').replace(/\$/g, '\\$')
+
   // ─── Export to Code ─────────────────────────────────────
   const exportCode = useCallback(() => {
     const edgeMap = new Map<string, string[]>()
@@ -189,6 +315,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
 
     const lines: string[] = []
     lines.push(`// Generated from node graph: ${macroName || 'Untitled Macro'}`)
+    lines.push('// Requires a selected token on the canvas')
     lines.push('')
 
     const nodeMap = new Map(nodes.map((n) => [n.id, n]))
@@ -203,10 +330,35 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'rollDice': {
           const formula = d.formula || '1d20'
           lines.push(`// Roll Dice: ${formula}`)
-          lines.push(`const roll = await game.dice.roll("${formula}")`)
+          lines.push(`const roll = await game.dice.roll("${esc(formula)}")`)
           lines.push('await roll.evaluate({ async: true })')
-          if (d.flavor) lines.push(`roll.toMessage({ flavor: "${d.flavor.replace(/"/g, '\\"')}" })`)
+          if (d.flavor) lines.push(`roll.toMessage({ flavor: "${esc(d.flavor)}" })`)
           lines.push('const rollResult = roll.total')
+          lines.push('')
+          break
+        }
+        case 'dealDamage': {
+          const amount = d.amount || '10'
+          lines.push('// Deal Damage')
+          lines.push('if (token) {')
+          lines.push(`  const cur = token.actor.system.attributes.hp.value`)
+          lines.push(`  const newHp = Math.max(0, cur - ${parseInt(amount) || 10})`)
+          lines.push('  await token.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(`  ChatMessage.create({ content: \`\${token.name} takes ${esc(amount)} damage.\` })`)
+          lines.push('}')
+          lines.push('')
+          break
+        }
+        case 'healTarget': {
+          const amount = d.amount || '10'
+          lines.push('// Heal Target')
+          lines.push('if (token) {')
+          lines.push(`  const cur = token.actor.system.attributes.hp.value`)
+          lines.push(`  const max = token.actor.system.attributes.hp.max`)
+          lines.push(`  const newHp = Math.min(max, cur + ${parseInt(amount) || 10})`)
+          lines.push('  await token.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(`  ChatMessage.create({ content: \`\${token.name} heals for ${esc(amount)}.\` })`)
+          lines.push('}')
           lines.push('')
           break
         }
@@ -215,7 +367,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           const mode = d.mode === 'IC' ? 'IC' : 'OOC'
           lines.push('// Send Chat Message')
           lines.push('ChatMessage.create({')
-          lines.push(`  content: "${content.replace(/"/g, '\\"')}",`)
+          lines.push(`  content: "${esc(content)}",`)
           lines.push(`  type: CONST.CHAT_MESSAGE_TYPES.${mode},`)
           lines.push('})')
           lines.push('')
@@ -223,14 +375,15 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'applyEffect': {
           const effectName = String(d.effectName || '')
+          const dur = d.amount || '60'
           lines.push('// Apply Effect')
           lines.push('if (token) {')
-          lines.push('  const effect = await ActiveEffect.create({')
-          lines.push(`    label: "${effectName.replace(/"/g, '\\"')}",`)
+          lines.push('  const effectData = {')
+          lines.push(`    label: "${esc(effectName)}",`)
           lines.push('    origin: token.actor.uuid,')
-          lines.push('    duration: { seconds: 60 }')
-          lines.push('  })')
-          lines.push('  await token.actor.createEmbeddedDocuments("ActiveEffect", [effect])')
+          lines.push(`    duration: { seconds: ${parseInt(dur) || 60} }`)
+          lines.push('  }')
+          lines.push('  await token.actor.createEmbeddedDocuments("ActiveEffect", [effectData])')
           lines.push('}')
           lines.push('')
           break
@@ -255,9 +408,34 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           break
         }
         case 'runMacro': {
-          const macroName = String(d.macroName || '')
+          const macroName = d.macroName || ''
+          const macroUuid = d.macroUuid || ''
           lines.push(`// Run Macro: ${macroName}`)
-          lines.push(`game.macros.getName("${macroName.replace(/"/g, '\\"')}")?.execute()`)
+          if (macroUuid) {
+            lines.push(`game.macros.get("${esc(macroUuid)}")?.execute()`)
+          } else if (macroName) {
+            lines.push(`game.macros.getName("${esc(macroName)}")?.execute()`)
+          }
+          lines.push('')
+          break
+        }
+        case 'abilityCheck': {
+          const ability = d.ability || 'str'
+          const flavors = d.flavor ? `, { flavor: "${esc(d.flavor)}" }` : ''
+          lines.push(`// Ability Check: ${ability.toUpperCase()}`)
+          lines.push('if (token) {')
+          lines.push(`  await token.actor.rollAbilityTest("${esc(ability)}"${flavors})`)
+          lines.push('}')
+          lines.push('')
+          break
+        }
+        case 'skillCheck': {
+          const skill = d.skill || 'prc'
+          const flavors = d.flavor ? `, { flavor: "${esc(d.flavor)}" }` : ''
+          lines.push(`// Skill Check: ${skill}`)
+          lines.push('if (token) {')
+          lines.push(`  await token.actor.rollSkill("${esc(skill)}"${flavors})`)
+          lines.push('}')
           lines.push('')
           break
         }
@@ -273,43 +451,84 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     ? nodes.find((n) => n.id === selectedNode)?.data ?? null
     : null
 
+  // ─── Field labels for properties panel ───────────────────
+  const fieldLabels: Record<string, string> = {
+    formula: 'Formula',
+    flavor: 'Flavor Text',
+    content: 'Message',
+    mode: 'Mode',
+    effectName: 'Effect Name',
+    target: 'Target',
+    amount: 'Duration (seconds)',
+    condition: 'Condition',
+    trueLabel: 'True Label',
+    falseLabel: 'False Label',
+    name: 'Variable Name',
+    value: 'Value',
+    macroName: 'Macro Name',
+    macroUuid: 'Macro UUID',
+    ability: 'Ability',
+    skill: 'Skill',
+  }
+
+  const fieldPlaceholders: Record<string, string> = {
+    formula: 'e.g. 1d20+5',
+    flavor: 'Optional flavor text',
+    content: 'Your message here',
+    mode: 'OOC or IC',
+    effectName: 'Burning, Poisoned, etc.',
+    target: 'selected',
+    amount: 'Seconds',
+    condition: 'e.g. rollResult > 10',
+    trueLabel: 'True',
+    falseLabel: 'False',
+    name: 'myVar',
+    value: '42',
+    macroName: 'Macro name',
+    macroUuid: 'Macro.UUID',
+    ability: 'str, dex, con, int, wis, cha',
+    skill: 'prc, inv, ath, acr, ste, ...',
+  }
+
   return (
     <div className="flex h-full">
       {/* Palette sidebar */}
       <div className="w-56 shrink-0 border-r bg-muted/10 flex flex-col overflow-y-auto p-3">
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Actions</div>
-        {paletteItems.filter((i) => i.category === 'action').map((item) => (
-          <button
-            key={item.type}
-            onClick={() => addNodeToCanvas(item)}
-            className="text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-1"
-          >
-            <span className="font-medium">{item.label}</span>
-            <p className="text-[10px] text-muted-foreground">{item.description}</p>
-          </button>
-        ))}
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Logic</div>
-        {paletteItems.filter((i) => i.category === 'logic').map((item) => (
-          <button
-            key={item.type}
-            onClick={() => addNodeToCanvas(item)}
-            className="text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-1"
-          >
-            <span className="font-medium">{item.label}</span>
-            <p className="text-[10px] text-muted-foreground">{item.description}</p>
-          </button>
-        ))}
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 mt-4">Data</div>
-        {paletteItems.filter((i) => i.category === 'data').map((item) => (
-          <button
-            key={item.type}
-            onClick={() => addNodeToCanvas(item)}
-            className="text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-1"
-          >
-            <span className="font-medium">{item.label}</span>
-            <p className="text-[10px] text-muted-foreground">{item.description}</p>
-          </button>
-        ))}
+        {paletteSections.map((section) => {
+          const collapsed = sectionsCollapsed[section.title] ?? false
+          return (
+            <div key={section.title} className="mb-3">
+              <button
+                onClick={() => toggleSection(section.title)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-full text-left mb-1.5 hover:text-foreground transition-colors"
+              >
+                {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {section.icon || null}
+                {section.title}
+              </button>
+              {!collapsed && section.items.map((item) => (
+                <button
+                  key={item.type + '-' + item.label}
+                  onClick={() => addNodeToCanvas(item)}
+                  className={cn(
+                    'text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-0.5 w-full',
+                    item.category === 'macro' && 'text-purple-300 hover:text-purple-200'
+                  )}
+                >
+                  <span className="font-medium">{item.label}</span>
+                  <p className="text-[10px] text-muted-foreground truncate">{item.description}</p>
+                </button>
+              ))}
+            </div>
+          )
+        })}
+
+        {loadingMacros && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-2 py-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading macros...
+          </div>
+        )}
 
         <div className="mt-auto pt-3 border-t space-y-2">
           <Button size="sm" className="w-full gap-1" onClick={exportCode} disabled={nodes.length === 0}>
@@ -352,12 +571,14 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
                 .filter(([key]) => !['type', 'label', 'category', 'description'].includes(key))
                 .map(([key, val]) => (
                   <div key={key}>
-                    <Label className="text-xs capitalize">{key}</Label>
+                    <Label className="text-xs capitalize">
+                      {fieldLabels[key] || key.replace(/([A-Z])/g, ' $1').trim()}
+                    </Label>
                     <Input
                       className="h-8 text-xs mt-0.5"
                       value={String(val ?? '')}
                       onChange={(e) => updateNodeData(selectedNode, key, e.target.value)}
-                      placeholder={`Enter ${key}...`}
+                      placeholder={fieldPlaceholders[key] || `Enter ${key}...`}
                     />
                   </div>
                 ))}
