@@ -49,7 +49,6 @@ import {
   Skull,
   Target,
   Search,
-  Variable as VariableIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { relay } from '@/lib/relay'
@@ -74,8 +73,6 @@ interface CustomNodeData {
   effectName?: string
   // condition
   condition?: string
-  trueLabel?: string
-  falseLabel?: string
   // variable
   name?: string
   value?: string
@@ -100,13 +97,11 @@ interface CustomNodeData {
   soundName?: string
   // apply status
   statusId?: string
-  statusLabel?: string
   // concentration save
   damageAmount?: string
   // death save
   // search actor
   actorQuery?: string
-  actorUuid?: string
   // module-specific
   moduleId?: string
   moduleVersion?: string
@@ -168,7 +163,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'action',
     description: 'Deal damage to selected token',
     icon: <Crosshair className="h-3 w-3 text-red-400" />,
-    defaultData: { target: 'selected', amount: '10' },
+    defaultData: { amount: '10' },
   },
   {
     type: 'healTarget',
@@ -176,7 +171,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'action',
     description: 'Heal selected token',
     icon: <Crosshair className="h-3 w-3 text-green-400" />,
-    defaultData: { target: 'selected', amount: '10' },
+    defaultData: { amount: '10' },
   },
   {
     type: 'sendChat',
@@ -192,7 +187,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'action',
     description: 'Apply an active effect',
     icon: <Blocks className="h-3 w-3 text-yellow-400" />,
-    defaultData: { effectName: 'Burning', target: 'selected', amount: '60' },
+    defaultData: { effectName: 'Burning', amount: '60' },
   },
   {
     type: 'applyStatus',
@@ -200,7 +195,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'action',
     description: 'Apply a status condition icon',
     icon: <Shield className="h-3 w-3 text-orange-400" />,
-    defaultData: { statusId: 'poisoned', statusLabel: 'Poisoned' },
+    defaultData: { statusId: 'poisoned' },
   },
   {
     type: 'abilityCheck',
@@ -265,7 +260,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'logic',
     description: 'If/else branching',
     icon: <Blocks className="h-3 w-3 text-amber-400" />,
-    defaultData: { condition: 'true', trueLabel: 'True', falseLabel: 'False' },
+    defaultData: { condition: 'true' },
   },
   // Data
   {
@@ -283,7 +278,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'action',
     description: 'Search for an actor by name',
     icon: <Search className="h-3 w-3 text-sky-400" />,
-    defaultData: { actorQuery: '', actorUuid: '' },
+    defaultData: { actorQuery: '' },
   },
   {
     type: 'searchTargets',
@@ -912,7 +907,9 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       // Helper: check if a field value should come from a data pipe
       function fieldVal(fieldKey: string, fallback: string): string {
         const pipeVar = dataForInput(nodeId, fieldKey)
-        return pipeVar ? pipeVar : fallback
+        if (pipeVar) return pipeVar
+        const nodeVal = String(d[fieldKey] ?? '')
+        return nodeVal || fallback
       }
 
       // Module-mapped nodes
@@ -945,7 +942,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'rollDice': {
           const formula = d.formula || '1d20'
           lines.push(indent + '// Roll Dice: ' + formula)
-          lines.push(indent + 'const roll = await game.dice.roll("' + esc(formula) + '")')
+          lines.push(indent + 'const roll = new Roll("' + esc(formula) + '")')
           lines.push(indent + 'await roll.evaluate({ async: true })')
           if (d.flavor) lines.push(indent + 'roll.toMessage({ flavor: "' + esc(d.flavor) + '" })')
           lines.push(indent + 'const ' + dataVar(nodeId, 'result') + ' = roll.total')
@@ -956,14 +953,16 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'dealDamage': {
           const damount = fieldVal('amount', d.amount || '10')
+          const dmgAmountVal = '(' + damount + ')'
           lines.push(indent + '// Deal Damage')
           const targetExpr = fieldVal('target', 'token')
           lines.push(indent + 'const dmgTarget = ' + targetExpr)
-          lines.push(indent + 'if (dmgTarget) {')
-          lines.push(indent + '  const cur = dmgTarget.actor?.system.attributes.hp.value || 0')
-          lines.push(indent + '  const newHp = Math.max(0, cur - (' + damount + '))')
-          lines.push(indent + '  await dmgTarget.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(indent + '  ChatMessage.create({ content: dmgTarget.name + " takes ' + esc(d.amount || '10') + ' damage." })')
+          lines.push(indent + 'const actorRef = dmgTarget?.actor || dmgTarget')
+          lines.push(indent + 'if (actorRef) {')
+          lines.push(indent + '  const cur = actorRef.system.attributes.hp.value || 0')
+          lines.push(indent + '  const newHp = Math.max(0, cur - ' + dmgAmountVal + ')')
+          lines.push(indent + '  await actorRef.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: (dmgTarget.name || actorRef.name) + " takes " + ' + dmgAmountVal + ' + " damage." })')
           lines.push(indent + '}')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -972,15 +971,17 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'healTarget': {
           const hamount = fieldVal('amount', d.amount || '10')
+          const healAmountVal = '(' + hamount + ')'
           lines.push(indent + '// Heal Target')
           const htargetExpr = fieldVal('target', 'token')
           lines.push(indent + 'const healTarget_ = ' + htargetExpr)
-          lines.push(indent + 'if (healTarget_) {')
-          lines.push(indent + '  const cur = healTarget_.actor?.system.attributes.hp.value || 0')
-          lines.push(indent + '  const max = healTarget_.actor?.system.attributes.hp.max || 999')
-          lines.push(indent + '  const newHp = Math.min(max, cur + (' + hamount + '))')
-          lines.push(indent + '  await healTarget_.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(indent + '  ChatMessage.create({ content: healTarget_.name + " heals for ' + esc(d.amount || '10') + '." })')
+          lines.push(indent + 'const hActorRef = healTarget_?.actor || healTarget_')
+          lines.push(indent + 'if (hActorRef) {')
+          lines.push(indent + '  const cur = hActorRef.system.attributes.hp.value || 0')
+          lines.push(indent + '  const max = hActorRef.system.attributes.hp.max || 999')
+          lines.push(indent + '  const newHp = Math.min(max, cur + ' + healAmountVal + ')')
+          lines.push(indent + '  await hActorRef.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: (healTarget_.name || hActorRef.name) + " heals for " + ' + healAmountVal + ' + "." })')
           lines.push(indent + '}')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -1006,13 +1007,14 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           const dur = d.amount || '60'
           lines.push(indent + '// Apply Effect')
           lines.push(indent + 'const applyTarget = ' + targetExpr)
-          lines.push(indent + 'if (applyTarget) {')
+          lines.push(indent + 'const applyActor = applyTarget?.actor || applyTarget')
+          lines.push(indent + 'if (applyActor) {')
           lines.push(indent + '  const effectData = {')
           lines.push(indent + '    label: String(' + effectName + '),')
-          lines.push(indent + '    origin: applyTarget.actor?.uuid,')
+          lines.push(indent + '    origin: applyActor.uuid,')
           lines.push(indent + '    duration: { seconds: ' + (parseInt(dur) || 60) + ' }')
           lines.push(indent + '  }')
-          lines.push(indent + '  await applyTarget.actor?.createEmbeddedDocuments("ActiveEffect", [effectData])')
+          lines.push(indent + '  await applyActor.createEmbeddedDocuments("ActiveEffect", [effectData])')
           lines.push(indent + '}')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -1053,9 +1055,10 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'variable': {
           const varName = String(d.name || 'myVar')
-          const varValue = String(d.value || 'undefined')
+          const varValue = String(d.value || '')
+          const safeValue = varValue || 'undefined'
           lines.push(indent + '// Variable: ' + varName)
-          lines.push(indent + 'const ' + varName + ' = ' + varValue)
+          lines.push(indent + 'const ' + varName + ' = ' + safeValue)
           lines.push(indent + 'const ' + dataVar(nodeId, 'value') + ' = ' + varName)
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -1123,13 +1126,14 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'rollTable': {
           const tableName = d.tableName || ''
-          lines.push(indent + '// Roll Table: ' + tableName)
-          if (tableName) {
-            lines.push(indent + 'const table = game.tables.getName("' + esc(tableName) + '")')
-            lines.push(indent + 'if (table) {')
-            lines.push(indent + '  await table.roll()')
-            lines.push(indent + '}')
-          }
+          const tableId = d.tableId || ''
+          lines.push(indent + '// Roll Table: ' + (tableName || tableId))
+          const tableRef = tableName ? 'game.tables.getName("' + esc(tableName) + '")' : (tableId ? 'game.tables.get("' + esc(tableId) + '")' : 'null')
+          lines.push(indent + 'const table = ' + tableRef)
+          lines.push(indent + 'if (table) {')
+          lines.push(indent + '  const rollResult = await table.roll()')
+          lines.push(indent + '  const ' + dataVar(nodeId, 'result') + ' = rollResult?.results?.[0]?.text || ""')
+          lines.push(indent + '}')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
@@ -1215,8 +1219,9 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'getActorHP': {
           lines.push(indent + '// Get Actor HP')
-          lines.push(indent + 'if (token) {')
-          lines.push(indent + '  const hpData = token.actor.system.attributes.hp')
+          lines.push(indent + 'const hpActor = token?.actor')
+          lines.push(indent + 'if (hpActor) {')
+          lines.push(indent + '  const hpData = hpActor.system.attributes.hp')
           lines.push(indent + '  const ' + dataVar(nodeId, 'hp') + ' = hpData.value')
           lines.push(indent + '  const ' + dataVar(nodeId, 'maxHp') + ' = hpData.max')
           lines.push(indent + '  const ' + dataVar(nodeId, 'tempHp') + ' = hpData.temp || 0')
@@ -1288,8 +1293,6 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     target: 'Target',
     amount: 'Duration (seconds)',
     condition: 'Condition',
-    trueLabel: 'True Label',
-    falseLabel: 'False Label',
     name: 'Variable Name',
     value: 'Value',
     macroName: 'Macro Name',
@@ -1303,7 +1306,6 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     sceneName: 'Scene Name',
     sceneId: 'Scene ID',
     statusId: 'Status Effect',
-    statusLabel: 'Status Label',
     damageAmount: 'Damage Taken',
     moduleId: 'Module ID',
     moduleVersion: 'Version',
