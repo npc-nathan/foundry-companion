@@ -49,7 +49,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 p-4 lg:p-6 min-h-0 h-0">
           {children}
         </main>
       </div>
