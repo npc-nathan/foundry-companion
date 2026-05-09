@@ -266,6 +266,27 @@ export const relay = {
     encounter?: string;
   }) => apiPost('/remove-from-encounter', params),
 
+  // ─── World Info / Module Detection ──────────────────────
+
+  worldInfo: () =>
+    apiGet<{
+      id: string;
+      title: string;
+      description: string;
+      modules: Array<{
+        id: string;
+        title: string;
+        active: boolean;
+        version: string;
+        description?: string;
+        authors?: string;
+      }>;
+      [key: string]: unknown;
+    }>('/world-info'),
+
+  executeJs: (script: string) =>
+    apiPost<{ result: unknown }>('/execute-js', { script }),
+
   // ─── Macros ──────────────────────────────────────────────
 
   getMacros: () =>
