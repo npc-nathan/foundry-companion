@@ -14,7 +14,7 @@ export function AppShell({ sidebar, children }: AppShellProps) {
   const { ui, config, toggleSidebar } = useStore()
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-full bg-background">
       {/* Mobile sidebar overlay */}
       {ui.sidebarOpen && (
         <div
