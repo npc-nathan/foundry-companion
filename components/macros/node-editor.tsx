@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import {
   ReactFlow,
   addEdge,
@@ -49,6 +49,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { relay } from '@/lib/relay'
+import { getModuleMapping, type ModuleNodeProperty } from '@/lib/module-mappings'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -102,6 +103,9 @@ interface CustomNodeData {
   // search actor
   actorQuery?: string
   actorUuid?: string
+  // module-specific
+  moduleId?: string
+  moduleVersion?: string
   [key: string]: unknown
 }
 
@@ -270,61 +274,6 @@ const staticPaletteItems: PaletteItem[] = [
   },
 ]
 
-// ─── Module templates ──────────────────────────────────────
-// Known module → node types to auto-inject when module is active
-
-const MODULE_NODE_TEMPLATES: Record<
-  string,
-  { type: string; label: string; description: string; defaultData: Partial<CustomNodeData> }[]
-> = {
-  'dfreds-convenient-effects': [
-    {
-      type: 'applyCEffect',
-      label: 'Apply CE Effect',
-      description: 'Apply a Convenient Effect',
-      defaultData: { effectName: 'Burning' },
-    },
-    {
-      type: 'removeCEffect',
-      label: 'Remove CE Effect',
-      description: 'Remove a Convenient Effect',
-      defaultData: { effectName: 'Burning' },
-    },
-  ],
-  'midi-qol': [
-    {
-      type: 'midiRollAttack',
-      label: 'Midi Attack Roll',
-      description: 'Roll attack through MidiQoL',
-      defaultData: { itemName: '' },
-    },
-  ],
-  'warpgate': [
-    {
-      type: 'warpgateTeleport',
-      label: 'Warp Gate Teleport',
-      description: 'Teleport token via Warp Gate',
-      defaultData: { targetScene: '' },
-    },
-  ],
-  'tokenmagic': [
-    {
-      type: 'tokenMagicFX',
-      label: 'TokenMagic FX',
-      description: 'Apply TokenMagic filter',
-      defaultData: { effectName: '' },
-    },
-  ],
-  'sequencer': [
-    {
-      type: 'sequencerEffect',
-      label: 'Sequencer Effect',
-      description: 'Play a Sequencer effect',
-      defaultData: { effectName: '' },
-    },
-  ],
-}
-
 // ─── Node Component ─────────────────────────────────────────
 
 const categoryColors: Record<NodeCategory, string> = {
@@ -426,6 +375,8 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   const [loadingMacros, setLoadingMacros] = useState(true)
   const [loadingModules, setLoadingModules] = useState(true)
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({})
+  // Cache for dynamic property options
+  const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({})
 
   // ─── Fetch macros from relay ────────────────────────────
   useEffect(() => {
@@ -479,13 +430,27 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       .worldInfo()
       .then((data) => {
         if (!mounted) return
-        // apiGet returns { type: 'world-info', data: { modules: [...] } }
-        // but might also return flat { type: 'world-info', modules: [...] }
         const payload = (data && 'data' in (data as object)
           ? (data as Record<string, unknown>).data
           : data) as Record<string, unknown> | null
         const rawModules = payload?.modules as InstalledModule[] | undefined
-        setInstalledModules(rawModules?.filter((m) => m.active) ?? [])
+        const active = rawModules?.filter((m) => m.active) ?? []
+        setInstalledModules(active)
+
+        // Build dynamic property options from known modules
+        const opts: Record<string, { value: string; label: string }[]> = {}
+        for (const mod of active) {
+          const mapping = getModuleMapping(mod.id)
+          if (!mapping) continue
+          for (const nodeDef of mapping.nodes) {
+            for (const prop of nodeDef.properties) {
+              if (prop.options) {
+                opts[`${mod.id}:${nodeDef.type}:${prop.key}`] = prop.options
+              }
+            }
+          }
+        }
+        setDynamicOptions(opts)
         setLoadingModules(false)
       })
       .catch(() => {
@@ -500,91 +465,112 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   }, [])
 
   // ─── Build palette sections ─────────────────────────────
-  const paletteSections: PaletteSection[] = [
-    {
-      title: 'Actions',
-      items: staticPaletteItems.filter((i) => i.category === 'action'),
-    },
-    {
-      title: 'Logic',
-      items: staticPaletteItems.filter((i) => i.category === 'logic'),
-    },
-    {
-      title: 'Data',
-      items: staticPaletteItems.filter((i) => i.category === 'data'),
-    },
-  ]
+  const paletteSections = useMemo<PaletteSection[]>(() => {
+    const sections: PaletteSection[] = [
+      {
+        title: 'Actions',
+        items: staticPaletteItems.filter((i) => i.category === 'action'),
+      },
+      {
+        title: 'Logic',
+        items: staticPaletteItems.filter((i) => i.category === 'logic'),
+      },
+      {
+        title: 'Data',
+        items: staticPaletteItems.filter((i) => i.category === 'data'),
+      },
+    ]
 
-  // Foundry Macros section (dynamic from relay)
-  if (remoteMacros.length > 0) {
-    paletteSections.push({
-      title: `Foundry Macros (${remoteMacros.length})`,
-      icon: <Blocks className="h-3 w-3 text-purple-500" />,
-      items: remoteMacros.map(
-        (m) =>
-          ({
-            type: 'runMacro',
-            label: m.name,
-            category: 'macro',
-            description: `Run "${m.name}"`,
-            defaultData: {
-              macroName: m.name,
-              macroUuid: m.uuid,
-              description: `Execute: ${m.name}`,
-            },
-          }) as PaletteItem
-      ),
-    })
-  }
-
-  // Foundry Modules section (dynamic from relay world-info)
-  const activeModules = installedModules.filter((m) => m.active)
-  if (activeModules.length > 0) {
-    const moduleItems: PaletteItem[] = []
-
-    // Module entries themselves
-    for (const mod of activeModules) {
-      moduleItems.push({
-        type: 'moduleInfo',
-        label: mod.title,
-        category: 'module',
-        description: mod.description || mod.id,
-        icon: <Puzzle className="h-3 w-3 text-pink-400" />,
-        defaultData: {
-          moduleId: mod.id,
-          moduleVersion: mod.version,
-          description: mod.title,
-        },
+    // Foundry Macros section (dynamic from relay)
+    if (remoteMacros.length > 0) {
+      sections.push({
+        title: `Foundry Macros (${remoteMacros.length})`,
+        icon: <Blocks className="h-3 w-3 text-purple-500" />,
+        items: remoteMacros.map(
+          (m) =>
+            ({
+              type: 'runMacro',
+              label: m.name,
+              category: 'macro',
+              description: `Run "${m.name}"`,
+              defaultData: {
+                macroName: m.name,
+                macroUuid: m.uuid,
+                description: `Execute: ${m.name}`,
+              },
+            }) as PaletteItem
+        ),
       })
+    }
 
-      // Known module templates
-      const templates = MODULE_NODE_TEMPLATES[mod.id]
-      if (templates) {
-        for (const tmpl of templates) {
+    // Foundry Modules section (using module-mappings)
+    const activeModules = installedModules.filter((m) => m.active)
+    if (activeModules.length > 0) {
+      const moduleItems: PaletteItem[] = []
+
+      for (const mod of activeModules) {
+        const mapping = getModuleMapping(mod.id)
+
+        if (mapping && mapping.nodes.length > 0) {
+          // Group header: module title
           moduleItems.push({
-            type: tmpl.type,
-            label: tmpl.label,
+            type: `_section_${mod.id}`,
+            label: mod.title,
             category: 'module',
-            description: tmpl.description,
+            description: mod.description || mapping.description,
             icon: <Puzzle className="h-3 w-3 text-pink-400" />,
-            defaultData: {
-              moduleId: mod.id,
-              ...tmpl.defaultData,
-              description: `${tmpl.description} (${mod.title})`,
-            },
+            defaultData: { moduleId: mod.id },
+          })
+
+          // Individual nodes from the mapping
+          for (const nodeDef of mapping.nodes) {
+            const defaults: Record<string, string> = {}
+            for (const prop of nodeDef.properties) {
+              if (prop.options && prop.options.length > 0) {
+                defaults[prop.key] = prop.options[0].value
+              } else if (prop.type === 'number') {
+                defaults[prop.key] = prop.placeholder || '0'
+              } else {
+                defaults[prop.key] = ''
+              }
+            }
+
+            moduleItems.push({
+              type: nodeDef.type,
+              label: nodeDef.label,
+              category: 'module',
+              description: `${nodeDef.description} (${mod.title})`,
+              icon: <Puzzle className="h-3 w-3 text-pink-400" />,
+              defaultData: {
+                moduleId: mod.id,
+                ...defaults,
+              },
+            })
+          }
+        } else {
+          // Unknown module — just show the module name with no templates
+          moduleItems.push({
+            type: '_unknown_module_',
+            label: mod.title,
+            category: 'module',
+            description: mod.description || mod.id,
+            icon: <Puzzle className="h-3 w-3 text-pink-400" />,
+            defaultData: { moduleId: mod.id, moduleVersion: mod.version, description: mod.title },
           })
         }
       }
+
+      if (moduleItems.length > 0) {
+        sections.push({
+          title: `Foundry Modules (${activeModules.length})`,
+          icon: <Puzzle className="h-3 w-3 text-pink-500" />,
+          items: moduleItems,
+        })
+      }
     }
 
-    if (moduleItems.length > 0) {
-      paletteSections.push({
-        title: `Foundry Modules (${activeModules.length})`,
-        icon: <Puzzle className="h-3 w-3 text-pink-500" />,
-        items: moduleItems,
-      })
-    }
-  }
+    return sections
+  }, [remoteMacros, installedModules])
 
   const toggleSection = (title: string) => {
     setSectionsCollapsed((prev) => ({ ...prev, [title]: !prev[title] }))
@@ -683,7 +669,37 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       if (!node) continue
 
       const d = node.data
+      const modId = String(d.moduleId || '')
 
+      // Module-mapped node — use generateCode from mapping
+      if (d.category === 'module' && modId) {
+        const mapping = getModuleMapping(modId)
+        if (mapping) {
+          const nodeDef = mapping.nodes.find((n) => n.type === d.type)
+          if (nodeDef) {
+            // Build data record from node's data
+            const data: Record<string, string> = {}
+            for (const prop of nodeDef.properties) {
+              data[prop.key] = String(d[prop.key] ?? '')
+            }
+            const codeLines = nodeDef.generateCode(data)
+            for (const cl of codeLines) {
+              lines.push(cl)
+            }
+            continue
+          }
+        }
+        // Unknown module type — just add a comment
+        lines.push(`// Module: ${d.label} (${modId})`)
+        lines.push(`// TODO: Add API calls for this module action`)
+        lines.push('')
+        continue
+      }
+
+      // Internal / section header nodes — skip
+      if (d.type.startsWith('_')) continue
+
+      // Built-in node types
       switch (d.type) {
         case 'rollDice': {
           const formula = d.formula || '1d20'
@@ -879,28 +895,6 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           lines.push('')
           break
         }
-        // Module type node stubs — emit a comment so user can fill in
-        case 'moduleInfo': {
-          const modId = d.moduleId || ''
-          const modVer = d.moduleVersion || ''
-          lines.push(`// Module: ${modId} v${modVer}`)
-          lines.push(`// Add ${modId} API calls here`)
-          lines.push('')
-          break
-        }
-        default: {
-          if (
-            d.type &&
-            Object.values(MODULE_NODE_TEMPLATES).some((templates) =>
-              templates.some((t) => t.type === d.type)
-            )
-          ) {
-            lines.push(`// Module Action: ${d.label}`)
-            lines.push(`// TODO: Implement ${d.type} API call`)
-            lines.push('')
-          }
-          break
-        }
       }
     }
 
@@ -942,6 +936,22 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     damageAmount: 'Damage Taken',
     moduleId: 'Module ID',
     moduleVersion: 'Version',
+    duration: 'Duration',
+    effectFile: 'Effect File Path',
+    scale: 'Scale',
+    soundFile: 'Sound File Path',
+    volume: 'Volume',
+    weatherType: 'Weather Type',
+    intensity: 'Intensity',
+    filterType: 'Filter',
+    itemName: 'Item Name',
+    targetName: 'Token Name',
+    tileName: 'Tile Name',
+    animationType: 'Animation Type',
+    elevation: 'Elevation',
+    rangeBottom: 'Range Bottom',
+    rangeTop: 'Range Top',
+    wallName: 'Wall/Door Ref',
   }
 
   const fieldPlaceholders: Record<string, string> = {
@@ -967,27 +977,76 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     sceneName: 'e.g. The Tavern',
     statusId: 'poisoned, blinded, etc.',
     damageAmount: '10',
+    effectFile: 'modules/jb2a/...',
+    soundFile: 'modules/.../sound.ogg',
+    itemName: 'e.g. Longsword',
+    targetName: 'e.g. Goblin 1',
+    tileName: 'e.g. Trap Door',
+    elevation: '1',
+    rangeBottom: '0',
+    rangeTop: '5',
+    wallName: 'Wall ID or direction',
   }
 
   // ─── Determine if a field should be a select dropdown ─────
-  const isSelectField = (field: string): boolean => {
-    return ['mode', 'ability', 'skill', 'statusId'].includes(field)
-  }
+  const isSelectField = useCallback(
+    (field: string, nodeData: CustomNodeData | null): boolean => {
+      if (!nodeData) return ['mode', 'ability', 'skill', 'statusId'].includes(field)
 
-  const getSelectOptions = (field: string) => {
-    switch (field) {
-      case 'mode':
-        return MODE_OPTIONS.map((m) => ({ value: m, label: m }))
-      case 'ability':
-        return ABILITY_OPTIONS.map((a) => ({ value: a, label: a.toUpperCase() }))
-      case 'skill':
-        return SKILL_OPTIONS.map((s) => ({ value: s.value, label: s.label }))
-      case 'statusId':
-        return STATUS_OPTIONS.map((s) => ({ value: s.id, label: s.label }))
-      default:
-        return []
-    }
-  }
+      // Check if this is a mapped module property with options
+      const modId = String(nodeData.moduleId || '')
+      if (modId) {
+        const mapping = getModuleMapping(modId)
+        if (mapping) {
+          const nodeDef = mapping.nodes.find((n) => n.type === nodeData.type)
+          if (nodeDef) {
+            const prop = nodeDef.properties.find((p) => p.key === field)
+            if (prop && (prop.type === 'select' || prop.options)) return true
+          }
+        }
+      }
+
+      return ['mode', 'ability', 'skill', 'statusId'].includes(field)
+    },
+    []
+  )
+
+  const getSelectOptions = useCallback(
+    (field: string, nodeData: CustomNodeData | null) => {
+      // Standard fields first
+      switch (field) {
+        case 'mode':
+          return MODE_OPTIONS.map((m) => ({ value: m, label: m }))
+        case 'ability':
+          return ABILITY_OPTIONS.map((a) => ({ value: a, label: a.toUpperCase() }))
+        case 'skill':
+          return SKILL_OPTIONS.map((s) => ({ value: s.value, label: s.label }))
+        case 'statusId':
+          return STATUS_OPTIONS.map((s) => ({ value: s.id, label: s.label }))
+      }
+
+      // Module-mapped property
+      if (nodeData) {
+        const modId = String(nodeData.moduleId || '')
+        if (modId) {
+          const mapping = getModuleMapping(modId)
+          if (mapping) {
+            const nodeDef = mapping.nodes.find((n) => n.type === nodeData.type)
+            if (nodeDef) {
+              const prop = nodeDef.properties.find((p) => p.key === field)
+              if (prop?.options) return prop.options
+              // Check dynamic cache
+              const cacheKey = `${modId}:${nodeData.type}:${field}`
+              if (dynamicOptions[cacheKey]) return dynamicOptions[cacheKey]
+            }
+          }
+        }
+      }
+
+      return []
+    },
+    [dynamicOptions]
+  )
 
   return (
     <div className="flex h-full">
@@ -1006,21 +1065,44 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
                 {section.title}
               </button>
               {!collapsed &&
-                section.items.map((item) => (
-                  <button
-                    key={item.type + '-' + item.label}
-                    onClick={() => addNodeToCanvas(item)}
-                    className={cn(
-                      'text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-0.5 w-full flex items-center gap-1.5',
-                      item.category === 'macro' && 'text-purple-300 hover:text-purple-200',
-                      item.category === 'module' && 'text-pink-300 hover:text-pink-200'
-                    )}
-                  >
-                    {item.icon || null}
-                    <span className="font-medium truncate">{item.label}</span>
-                    <p className="text-[10px] text-muted-foreground truncate">{item.description}</p>
-                  </button>
-                ))}
+                section.items.map((item) => {
+                  // Check if this is a section header (group) within module items
+                  if (item.type.startsWith('_section_')) {
+                    return (
+                      <div
+                        key={item.type}
+                        className="px-2 py-1 mt-2 mb-0.5 text-[11px] font-semibold text-pink-400 uppercase tracking-wider border-b border-pink-500/20"
+                      >
+                        {item.label}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <button
+                      key={item.type + '-' + item.label}
+                      onClick={() => addNodeToCanvas(item)}
+                      className={cn(
+                        'text-left px-2 py-1.5 rounded text-sm hover:bg-accent/50 transition-colors mb-0.5 w-full flex items-center gap-1.5',
+                        item.category === 'macro' && 'text-purple-300 hover:text-purple-200',
+                        item.category === 'module' && 'text-pink-300 hover:text-pink-200',
+                        item.type === '_unknown_module_' && 'opacity-60 cursor-default'
+                      )}
+                      disabled={item.type === '_unknown_module_'}
+                    >
+                      {item.icon || null}
+                      <span className={cn(
+                        'font-medium truncate',
+                        item.type === '_unknown_module_' && 'text-muted-foreground'
+                      )}>
+                        {item.label}
+                      </span>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {item.type === '_unknown_module_' ? 'No available actions' : item.description}
+                      </p>
+                    </button>
+                  )
+                })}
             </div>
           )
         })}
@@ -1088,7 +1170,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
                     <Label className="text-xs capitalize">
                       {fieldLabels[key] || key.replace(/([A-Z])/g, ' $1').trim()}
                     </Label>
-                    {isSelectField(key) ? (
+                    {isSelectField(key, selectedNodeData) ? (
                       <Select
                         value={String(val ?? '')}
                         onValueChange={(v) => updateNodeData(selectedNode!, key, v ?? '')}
@@ -1097,11 +1179,13 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {getSelectOptions(key).map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                              {opt.label}
-                            </SelectItem>
-                          ))}
+                          {getSelectOptions(key, selectedNodeData).length > 0
+                            ? getSelectOptions(key, selectedNodeData).map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                  {opt.label}
+                                </SelectItem>
+                              ))
+                            : null}
                         </SelectContent>
                       </Select>
                     ) : (
