@@ -479,11 +479,13 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       .worldInfo()
       .then((data) => {
         if (!mounted) return
-        const modules: InstalledModule[] =
-          data && 'modules' in (data as object)
-            ? ((data as Record<string, unknown>).modules as InstalledModule[])
-            : []
-        setInstalledModules(modules.filter((m) => m.active))
+        // apiGet returns { type: 'world-info', data: { modules: [...] } }
+        // but might also return flat { type: 'world-info', modules: [...] }
+        const payload = (data && 'data' in (data as object)
+          ? (data as Record<string, unknown>).data
+          : data) as Record<string, unknown> | null
+        const rawModules = payload?.modules as InstalledModule[] | undefined
+        setInstalledModules(rawModules?.filter((m) => m.active) ?? [])
         setLoadingModules(false)
       })
       .catch(() => {
