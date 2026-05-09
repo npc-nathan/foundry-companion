@@ -1,10 +1,12 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from 'next-themes'
+import { sseManager } from '@/lib/sse'
+import { useStore } from '@/lib/store'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -19,6 +21,41 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   )
+
+  // Wire SSE events to invalidate TanStack Query caches
+  useEffect(() => {
+    const unsub = sseManager.listen((event) => {
+      const qc = queryClient
+      switch (event.type) {
+        case 'encounter':
+          qc.invalidateQueries({ queryKey: ['encounters'] })
+          break
+        case 'chat':
+          qc.invalidateQueries({ queryKey: ['chat-messages'] })
+          qc.invalidateQueries({ queryKey: ['users'] })
+          break
+        case 'scene':
+          qc.invalidateQueries({ queryKey: ['structure'] })
+          break
+        case 'hook':
+          qc.invalidateQueries({ queryKey: ['actor'] })
+          qc.invalidateQueries({ queryKey: ['effects'] })
+          qc.invalidateQueries({ queryKey: ['rolls'] })
+          break
+      }
+    })
+    return () => { unsub() }
+  }, [queryClient])
+
+  // Reconnect SSE on app reload when already connected
+  const { status, config } = useStore()
+  useEffect(() => {
+    if (status.connected && config.relayUrl && config.apiKey) {
+      sseManager.subscribe('encounter', config.relayUrl, config.apiKey, config.clientId)
+      sseManager.subscribe('chat', config.relayUrl, config.apiKey, config.clientId)
+      sseManager.subscribe('scene', config.relayUrl, config.apiKey, config.clientId)
+    }
+  }, [status.connected, config.relayUrl, config.apiKey, config.clientId])
 
   return (
     <QueryClientProvider client={queryClient}>

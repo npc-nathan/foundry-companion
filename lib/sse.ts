@@ -4,6 +4,15 @@
  * Uses fetch() + ReadableStream instead of EventSource so we can send
  * auth headers (x-api-key, x-client-id) through the proxy.
  * Supports auto-reconnect with exponential backoff.
+ *
+ * Relay SSE endpoints (from docs):
+ *   GET /hooks/subscribe    — all Foundry hooks (combat, actor, scene, etc.)
+ *   GET /encounters/subscribe — combat/encounter events
+ *   GET /actor/subscribe    — actor events (requires actorUuid)
+ *   GET /scene/subscribe    — scene events
+ *   GET /chat/subscribe     — chat message events
+ *   GET /rolls/subscribe    — dice roll events
+ * All require: ?clientId=<id> header: x-api-key
  */
 
 export type SSEEvent =
@@ -26,11 +35,12 @@ class SSEManager {
   /**
    * Subscribe to SSE events from the relay.
    * Uses the proxy endpoint /api/relay/* so auth headers are sent automatically.
+   * The relay requires a clientId query param for all subscribe endpoints.
    */
-  subscribe(source: string, _relayUrl: string, apiKey: string) {
+  subscribe(source: string, _relayUrl: string, apiKey: string, clientId: string) {
     if (this.abortControllers.has(source)) return
     this.retryCounters.set(source, 0)
-    this.connect(source, apiKey)
+    this.connect(source, apiKey, clientId)
   }
 
   /** Unsubscribe from a specific source */
@@ -41,7 +51,7 @@ class SSEManager {
     this.retryCounters.delete(source)
   }
 
-  private connect(source: string, apiKey: string) {
+  private connect(source: string, apiKey: string, clientId: string) {
     // Cancel any existing connection for this source
     const existing = this.abortControllers.get(source)
     if (existing) {
@@ -49,8 +59,11 @@ class SSEManager {
       this.abortControllers.delete(source)
     }
 
-    // Use the API proxy endpoint for SSE — auth headers flow naturally
-    const url = `/api/relay/${source}/subscribe`
+    // Map convenience source names to actual relay endpoints
+    const endpoint = source === 'encounter' ? 'encounters' : source
+
+    // Build URL with required clientId query param
+    const url = `/api/relay/${endpoint}/subscribe?clientId=${encodeURIComponent(clientId)}`
 
     const abort = new AbortController()
     this.abortControllers.set(source, abort)
@@ -60,7 +73,7 @@ class SSEManager {
         const response = await fetch(url, {
           headers: {
             'x-api-key': apiKey,
-            'x-client-id': 'companion-app',
+            'x-client-id': clientId,
           },
           signal: abort.signal,
         })
@@ -114,7 +127,7 @@ class SSEManager {
         if (retryCount < MAX_RETRIES) {
           this.retryCounters.set(source, retryCount + 1)
           const delay = BASE_DELAY * Math.pow(1.5, retryCount)
-          setTimeout(() => this.connect(source, apiKey), delay)
+          setTimeout(() => this.connect(source, apiKey, clientId), delay)
         }
       }
     }

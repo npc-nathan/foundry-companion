@@ -51,6 +51,20 @@ async function apiPut<T = unknown>(path: string, body?: unknown, query?: Record<
   return res.json() as Promise<T>;
 }
 
+async function apiPatch<T = unknown>(path: string, body?: unknown, query?: Record<string, string>) {
+  const base = getUrl(path);
+  const params = new URLSearchParams(query || {});
+  const qs = params.toString();
+  const url = qs ? `${base}?${qs}` : base;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: RELAY_HEADERS(),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
 export const relay = {
   health: () =>
     fetch(`${getUrl('/api/health')}`, { headers: RELAY_HEADERS() }).then((r) => r.json()),
@@ -251,4 +265,36 @@ export const relay = {
     combatantUuid: string;
     encounter?: string;
   }) => apiPost('/remove-from-encounter', params),
+
+  // ─── Macros ──────────────────────────────────────────────
+
+  getMacros: () =>
+    apiGet<unknown>('/macros'),
+
+  createMacro: (params: {
+    name: string;
+    type: string;
+    scope: string;
+    command: string;
+  }) => apiPost('/macros', params),
+
+  updateMacro: (uuid: string, data: Record<string, unknown>) =>
+    apiPatch<unknown>('/macros', { data }, { uuid }),
+
+  deleteMacro: (uuid: string) =>
+    fetch(`${getUrl('/macros')}?uuid=${uuid}`, {
+      method: 'DELETE',
+      headers: RELAY_HEADERS(),
+    }).then((r) => r.text()),
+
+  executeMacro: (uuid: string) =>
+    apiPost('/macros/evaluate', { uuid }),
+
+  // ─── Scenes ───────────────────────────────────────────────
+
+  activateScene: (params: { sceneId: string }) =>
+    apiPost('/activate-scene', params),
+
+  mcpCall: (toolName: string, params: Record<string, unknown>) =>
+    apiPost(`/${toolName}`, params),
 };

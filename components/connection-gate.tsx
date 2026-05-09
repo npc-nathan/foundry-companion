@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useStore } from "@/lib/store"
+import { sseManager } from "@/lib/sse"
 
 interface RelayClient {
   clientId: string
@@ -73,6 +74,11 @@ export function ConnectionGate() {
             role: config.role as "gm" | "player",
           })
           setConnected(true)
+
+          // Subscribe to real-time SSE channels on reconnect
+          sseManager.subscribe('encounter', config.relayUrl, config.apiKey, config.clientId)
+          sseManager.subscribe('chat', config.relayUrl, config.apiKey, config.clientId)
+          sseManager.subscribe('scene', config.relayUrl, config.apiKey, config.clientId)
         } catch {
           // Fall through to normal connect flow
           setLoading(false)
@@ -159,6 +165,11 @@ export function ConnectionGate() {
       role: role as "gm" | "player",
     })
     setConnected(true)
+
+    // Subscribe to real-time SSE channels
+    sseManager.subscribe('encounter', relayUrl, apiKey, client.clientId)
+    sseManager.subscribe('chat', relayUrl, apiKey, client.clientId)
+    sseManager.subscribe('scene', relayUrl, apiKey, client.clientId)
   }, [relayUrl, apiKey, role, selectedClient, clients, setConfig, setConnected])
 
   const handleBack = useCallback(() => {

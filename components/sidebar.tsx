@@ -11,8 +11,10 @@ import {
   Swords,
   MessageSquare,
   Dice5,
+  Code2,
   LogOut,
 } from "lucide-react"
+import { sseManager } from "@/lib/sse"
 
 const gmNavItems = [
   { label: "Dashboard", href: "/gm", icon: LayoutDashboard },
@@ -21,6 +23,7 @@ const gmNavItems = [
   { label: "Combat", href: "/gm/combat", icon: Swords },
   { label: "Chat", href: "/gm/chat", icon: MessageSquare },
   { label: "Dice", href: "/gm/dice", icon: Dice5 },
+  { label: "Macros", href: "/gm/macros", icon: Code2 },
 ]
 
 const playerNavItems = [
@@ -34,6 +37,10 @@ export function Sidebar() {
   const pathname = usePathname()
   const { config, reset } = useStore()
   const navItems = config.role === "gm" ? gmNavItems : playerNavItems
+  const handleDisconnect = () => {
+    sseManager.disconnectAll()
+    reset()
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -73,7 +80,7 @@ export function Sidebar() {
           {config.clientName}
         </div>
         <button
-          onClick={reset}
+          onClick={handleDisconnect}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
         >
           <LogOut className="h-4 w-4" />
