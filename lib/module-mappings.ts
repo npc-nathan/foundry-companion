@@ -344,7 +344,7 @@ const fxmaster: ModuleMapping = {
         '// --- FXMaster: Apply Filter ---',
         `const filter = "${esc(d.filterType || '')}"`,
         "if (!filter) { ui.notifications.warn('No filter selected'); return }",
-        'canvas.fxmaster.filters.add(filter)'.replace('canvas.filters.add', 'canvas.effects.filters.set'),
+        'canvas.effects.filters.set(filter, true)',
         "ui.notifications.info(`Applied ${filter} filter`)",
         '',
       ],
