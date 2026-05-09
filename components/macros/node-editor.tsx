@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import {
   ReactFlow,
-  addEdge,
   useNodesState,
   useEdgesState,
   Background,
@@ -48,6 +47,9 @@ import {
   Crosshair,
   Shield,
   Skull,
+  Target,
+  Search,
+  Variable as VariableIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { relay } from '@/lib/relay'
@@ -274,6 +276,39 @@ const staticPaletteItems: PaletteItem[] = [
     icon: <Blocks className="h-3 w-3 text-green-400" />,
     defaultData: { name: 'myVar', value: '' },
   },
+  // Search / Data Source nodes
+  {
+    type: 'searchActors',
+    label: 'Search Actors',
+    category: 'action',
+    description: 'Search for an actor by name',
+    icon: <Search className="h-3 w-3 text-sky-400" />,
+    defaultData: { actorQuery: '', actorUuid: '' },
+  },
+  {
+    type: 'searchTargets',
+    label: 'Search Targets',
+    category: 'action',
+    description: 'Get currently targeted tokens',
+    icon: <Target className="h-3 w-3 text-rose-400" />,
+    defaultData: {},
+  },
+  {
+    type: 'searchScenes',
+    label: 'Search Scenes',
+    category: 'action',
+    description: 'Get a scene by name',
+    icon: <Image className="h-3 w-3 text-teal-400" />,
+    defaultData: { sceneName: '' },
+  },
+  {
+    type: 'getActorHP',
+    label: 'Get Actor HP',
+    category: 'action',
+    description: 'Get HP & temp HP from selected token',
+    icon: <Shield className="h-3 w-3 text-emerald-400" />,
+    defaultData: {},
+  },
 ]
 
 // ─── Node Component ─────────────────────────────────────────
@@ -288,6 +323,18 @@ const categoryColors: Record<NodeCategory, string> = {
 
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
   const isCondition = data.type === 'condition'
+  const dataPorts = NODE_DATA_PORTS[data.type] || []
+
+  const dataTypeColor: Record<string, string> = {
+    any: '!border-cyan-400 !bg-cyan-900/60',
+    number: '!border-blue-400 !bg-blue-900/60',
+    string: '!border-yellow-400 !bg-yellow-900/60',
+    actor: '!border-emerald-400 !bg-emerald-900/60',
+    token: '!border-rose-400 !bg-rose-900/60',
+    scene: '!border-teal-400 !bg-teal-900/60',
+    boolean: '!border-purple-400 !bg-purple-900/60',
+  }
+
   return (
     <Card
       className={cn(
@@ -296,12 +343,28 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
         selected && 'ring-2 ring-primary'
       )}
     >
-      {/* Target handle */}
+      {/* Execution: Target handle (top) */}
       <Handle
         type="target"
         position={Position.Top}
         className="!w-3 !h-3 !border-2 !bg-gray-700 !border-white/40"
       />
+
+      {/* Data Inputs (left side) */}
+      {dataPorts
+        .filter((p) => p.type === 'input')
+        .map((port, i) => (
+          <Handle
+            key={`data-in-${port.id}`}
+            type="target"
+            position={Position.Left}
+            id={`data-in-${port.id}`}
+            className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
+            style={{ top: `${35 + i * 20}%` }}
+            title={port.label}
+          />
+        ))}
+
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
         <div>
@@ -311,7 +374,23 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
           </div>
         </div>
       </div>
-      {/* Source handle */}
+
+      {/* Data Outputs (right side) */}
+      {dataPorts
+        .filter((p) => p.type === 'output')
+        .map((port, i) => (
+          <Handle
+            key={`data-out-${port.id}`}
+            type="source"
+            position={Position.Right}
+            id={`data-out-${port.id}`}
+            className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
+            style={{ top: `${35 + i * 20}%` }}
+            title={port.label}
+          />
+        ))}
+
+      {/* Execution: Source handle (bottom) */}
       <Handle
         type="source"
         position={Position.Bottom}
@@ -403,6 +482,85 @@ const STATUS_OPTIONS = [
   { id: 'unconscious', label: 'Unconscious' },
   { id: 'concentration', label: 'Concentration' },
 ]
+
+// ─── Data Port Definitions ──────────────────────────────
+// Each node type can have data inputs (left side) and data outputs (right side)
+// These connect to create data flow separate from execution flow
+
+interface DataPortDef {
+  id: string
+  label: string
+  type: 'input' | 'output'
+  dataType: 'any' | 'number' | 'string' | 'boolean' | 'actor' | 'token' | 'scene'
+}
+
+const NODE_DATA_PORTS: Record<string, DataPortDef[]> = {
+  // Data producers (outputs on right side)
+  rollDice: [
+    { id: 'result', label: 'Result', type: 'output', dataType: 'number' },
+  ],
+  variable: [
+    { id: 'value', label: 'Value', type: 'output', dataType: 'any' },
+  ],
+  searchActors: [
+    { id: 'actor', label: 'Actor', type: 'output', dataType: 'actor' },
+  ],
+  searchTargets: [
+    { id: 'target', label: 'Target', type: 'output', dataType: 'token' },
+  ],
+  searchScenes: [
+    { id: 'scene', label: 'Scene', type: 'output', dataType: 'scene' },
+  ],
+  getActorHP: [
+    { id: 'hp', label: 'HP', type: 'output', dataType: 'number' },
+    { id: 'maxHp', label: 'Max HP', type: 'output', dataType: 'number' },
+    { id: 'tempHp', label: 'Temp HP', type: 'output', dataType: 'number' },
+  ],
+  condition: [
+    { id: 'result', label: 'Result', type: 'output', dataType: 'boolean' },
+    { id: 'condition', label: 'Expression', type: 'input', dataType: 'string' },
+    { id: 'trueTarget', label: 'True Branch', type: 'output', dataType: 'any' },
+    { id: 'falseTarget', label: 'False Branch', type: 'output', dataType: 'any' },
+  ],
+  rollTable: [
+    { id: 'result', label: 'Result', type: 'output', dataType: 'string' },
+  ],
+
+  // Data consumers (inputs on left side)
+  dealDamage: [
+    { id: 'amount', label: 'Amount', type: 'input', dataType: 'number' },
+    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+  ],
+  healTarget: [
+    { id: 'amount', label: 'Amount', type: 'input', dataType: 'number' },
+    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+  ],
+  sendChat: [
+    { id: 'content', label: 'Content', type: 'input', dataType: 'string' },
+  ],
+  applyEffect: [
+    { id: 'effectName', label: 'Effect Name', type: 'input', dataType: 'string' },
+    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+  ],
+  applyStatus: [
+    { id: 'statusId', label: 'Status', type: 'input', dataType: 'string' },
+  ],
+  abilityCheck: [
+    { id: 'ability', label: 'Ability', type: 'input', dataType: 'string' },
+  ],
+  skillCheck: [
+    { id: 'skill', label: 'Skill', type: 'input', dataType: 'string' },
+  ],
+  concentrationSave: [
+    { id: 'damageAmount', label: 'Damage', type: 'input', dataType: 'number' },
+  ],
+  toggleScene: [
+    { id: 'scene', label: 'Scene', type: 'input', dataType: 'scene' },
+  ],
+  runMacro: [
+    { id: 'macroUuid', label: 'Macro', type: 'input', dataType: 'string' },
+  ],
+}
 
 // ─── Canvas Component ───────────────────────────────────────
 
@@ -618,7 +776,31 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   }
 
   const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
+    (connection: Connection) => {
+      // Detect data connections (left/right handles) vs execution (top/bottom handles)
+      const isDataConnection =
+        (connection.sourceHandle?.startsWith('data-out-') ?? false) &&
+        (connection.targetHandle?.startsWith('data-in-') ?? false)
+      const isExecutionConnection =
+        !connection.sourceHandle && !connection.targetHandle
+
+      // Validate: don't mix data and execution handles
+      if (!isDataConnection && !isExecutionConnection) return
+
+      const edge: Edge = {
+        id: `edge-${Date.now()}`,
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: connection.sourceHandle ?? undefined,
+        targetHandle: connection.targetHandle ?? undefined,
+        type: isDataConnection ? 'dataEdge' : undefined,
+        style: isDataConnection
+          ? { stroke: '#22d3ee', strokeWidth: 2, strokeDasharray: '5,5' }
+          : { stroke: '#555', strokeWidth: 2 },
+        animated: false,
+      }
+      setEdges((eds) => [...eds, edge])
+    },
     [setEdges]
   )
 
@@ -672,13 +854,41 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
 
   // ─── Export to Code ─────────────────────
   const exportCode = useCallback(() => {
-    // edgeMap with handle-aware connections
-    const edgeMap = new Map<string, { target: string; handle: string | null | undefined }[]>()
+    // edgeMap: execution flow edges (source → targets)
+    const execEdgeMap = new Map<string, { target: string; handle: string | null | undefined }[]>()
     const nodeMap = new Map(nodes.map((n) => [n.id, n]))
-    nodes.forEach((n) => edgeMap.set(n.id, []))
-    edges.forEach((e) => {
-      edgeMap.get(e.source)?.push({ target: e.target, handle: e.sourceHandle })
-    })
+    nodes.forEach((n) => execEdgeMap.set(n.id, []))
+    edges
+      .filter((e) => !e.sourceHandle || e.sourceHandle.startsWith('exec-') || (!e.sourceHandle && !e.targetHandle))
+      .forEach((e) => {
+        execEdgeMap.get(e.source)?.push({ target: e.target, handle: e.sourceHandle })
+      })
+
+    // dataInMap: incoming data connections to each node's input ports
+    // key: "targetNodeId:portId" → { sourceNodeId, sourcePortId }
+    const dataInMap = new Map<string, { sourceNodeId: string; sourcePortId: string }>()
+    for (const e of edges) {
+      if (!e.sourceHandle?.startsWith('data-out-') || !e.targetHandle?.startsWith('data-in-')) continue
+      const sourcePortId = e.sourceHandle.replace('data-out-', '')
+      const targetPortId = e.targetHandle.replace('data-in-', '')
+      dataInMap.set(`${e.target}:${targetPortId}`, { sourceNodeId: e.source, sourcePortId })
+    }
+
+    // dataOutVar: variable names for output ports
+    // convention: _d_{nodeId}_{portId} — e.g. _d_node-abc_result
+    function dataVar(nodeId: string, portId: string): string {
+      return `_d_${nodeId.replace(/[^a-zA-Z0-9]/g, '_')}_${portId}`
+    }
+
+    // Get the source node's data output variable for a target's input port
+    function dataForInput(nodeId: string, fieldKey: string): string | null {
+      const entry = dataInMap.get(`${nodeId}:${fieldKey}`)
+      if (!entry) return null
+      const sourcePortDef = (NODE_DATA_PORTS[nodeMap.get(entry.sourceNodeId)?.data?.type || ''] || [])
+        .find((p) => p.id === entry.sourcePortId)
+      if (!sourcePortDef) return null
+      return dataVar(entry.sourceNodeId, entry.sourcePortId)
+    }
 
     const visited = new Set<string>()
 
@@ -694,6 +904,12 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
 
       if ((d.type as string).startsWith('_')) return
 
+      // Helper: check if a field value should come from a data pipe
+      function fieldVal(fieldKey: string, fallback: string): string {
+        const pipeVar = dataForInput(nodeId, fieldKey)
+        return pipeVar ? pipeVar : fallback
+      }
+
       // Module-mapped nodes
       const modId = String(d.moduleId || '')
       if (d.category === 'module' && modId) {
@@ -708,7 +924,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
             for (const cl of nodeDef.generateCode(data)) {
               lines.push(indent + cl)
             }
-            for (const edge of edgeMap.get(nodeId) || []) {
+            for (const edge of execEdgeMap.get(nodeId) || []) {
               if (!edge.handle) generateNodeLines(edge.target, lines, depth)
             }
             return
@@ -727,98 +943,97 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           lines.push(indent + 'const roll = await game.dice.roll("' + esc(formula) + '")')
           lines.push(indent + 'await roll.evaluate({ async: true })')
           if (d.flavor) lines.push(indent + 'roll.toMessage({ flavor: "' + esc(d.flavor) + '" })')
-          lines.push(indent + 'const rollResult = roll.total')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          lines.push(indent + 'const ' + dataVar(nodeId, 'result') + ' = roll.total')
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'dealDamage': {
-          const amount = d.amount || '10'
-          const dmgAmt = parseInt(amount) || 10
+          const damount = fieldVal('amount', d.amount || '10')
           lines.push(indent + '// Deal Damage')
-          lines.push(indent + 'if (token) {')
-          lines.push(indent + '  const cur = token.actor.system.attributes.hp.value')
-          lines.push(indent + '  const newHp = Math.max(0, cur - ' + dmgAmt + ')')
-          lines.push(indent + '  await token.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(indent + '  ChatMessage.create({ content: token.name + " takes ' + esc(String(dmgAmt)) + ' damage." })')
+          const targetExpr = fieldVal('target', 'token')
+          lines.push(indent + 'const dmgTarget = ' + targetExpr)
+          lines.push(indent + 'if (dmgTarget) {')
+          lines.push(indent + '  const cur = dmgTarget.actor?.system.attributes.hp.value || 0')
+          lines.push(indent + '  const newHp = Math.max(0, cur - (' + damount + '))')
+          lines.push(indent + '  await dmgTarget.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: dmgTarget.name + " takes ' + esc(d.amount || '10') + ' damage." })')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'healTarget': {
-          const amount = d.amount || '10'
-          const healAmt = parseInt(amount) || 10
+          const hamount = fieldVal('amount', d.amount || '10')
           lines.push(indent + '// Heal Target')
-          lines.push(indent + 'if (token) {')
-          lines.push(indent + '  const cur = token.actor.system.attributes.hp.value')
-          lines.push(indent + '  const max = token.actor.system.attributes.hp.max')
-          lines.push(indent + '  const newHp = Math.min(max, cur + ' + healAmt + ')')
-          lines.push(indent + '  await token.actor.update({ "system.attributes.hp.value": newHp })')
-          lines.push(indent + '  ChatMessage.create({ content: token.name + " heals for ' + esc(String(healAmt)) + '." })')
+          const htargetExpr = fieldVal('target', 'token')
+          lines.push(indent + 'const healTarget_ = ' + htargetExpr)
+          lines.push(indent + 'if (healTarget_) {')
+          lines.push(indent + '  const cur = healTarget_.actor?.system.attributes.hp.value || 0')
+          lines.push(indent + '  const max = healTarget_.actor?.system.attributes.hp.max || 999')
+          lines.push(indent + '  const newHp = Math.min(max, cur + (' + hamount + '))')
+          lines.push(indent + '  await healTarget_.actor.update({ "system.attributes.hp.value": newHp })')
+          lines.push(indent + '  ChatMessage.create({ content: healTarget_.name + " heals for ' + esc(d.amount || '10') + '." })')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'sendChat': {
-          const content = String(d.content || '')
+          const content = fieldVal('content', String(d.content || ''))
           const mode = d.mode === 'IC' ? 'IC' : 'OOC'
           lines.push(indent + '// Send Chat Message')
           lines.push(indent + 'ChatMessage.create({')
-          lines.push(indent + '  content: "' + esc(content) + '",')
+          lines.push(indent + '  content: String(' + content + '),')
           lines.push(indent + '  type: CONST.CHAT_MESSAGE_TYPES.' + mode + ',')
           lines.push(indent + '})')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'applyEffect': {
-          const effectName = String(d.effectName || '')
+          const effectName = fieldVal('effectName', String(d.effectName || ''))
+          const targetExpr = fieldVal('target', 'token')
           const dur = d.amount || '60'
           lines.push(indent + '// Apply Effect')
-          lines.push(indent + 'if (token) {')
+          lines.push(indent + 'const applyTarget = ' + targetExpr)
+          lines.push(indent + 'if (applyTarget) {')
           lines.push(indent + '  const effectData = {')
-          lines.push(indent + '    label: "' + esc(effectName) + '",')
-          lines.push(indent + '    origin: token.actor.uuid,')
+          lines.push(indent + '    label: String(' + effectName + '),')
+          lines.push(indent + '    origin: applyTarget.actor?.uuid,')
           lines.push(indent + '    duration: { seconds: ' + (parseInt(dur) || 60) + ' }')
           lines.push(indent + '  }')
-          lines.push(indent + '  await token.actor.createEmbeddedDocuments("ActiveEffect", [effectData])')
+          lines.push(indent + '  await applyTarget.actor?.createEmbeddedDocuments("ActiveEffect", [effectData])')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'applyStatus': {
-          const statusId = String(d.statusId || 'poisoned')
-          const statusLabel = String(d.statusLabel || statusId)
-          lines.push(indent + '// Apply Status: ' + statusLabel)
+          const statusId = fieldVal('statusId', String(d.statusId || 'poisoned'))
+          lines.push(indent + '// Apply Status')
           lines.push(indent + 'if (token) {')
-          lines.push(indent + '  const status = CONFIG.statusEffects.find(s => s.id === "' + esc(statusId) + '")')
-          lines.push(indent + '  if (status) {')
-          lines.push(indent + '    await token.actor.toggleStatusEffect("' + esc(statusId) + '", { active: true })')
-          lines.push(indent + '  }')
+          lines.push(indent + '  await token.actor.toggleStatusEffect(String(' + statusId + '), { active: true })')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'condition': {
-          const cond = String(d.condition || 'true')
-          const trueLabel = String(d.trueLabel || 'True')
-          lines.push(indent + '// Condition: ' + cond)
+          const cond = fieldVal('condition', String(d.condition || 'true'))
+          lines.push(indent + '// Condition')
           lines.push(indent + 'if (' + cond + ') {')
-          const trueEdges = (edgeMap.get(nodeId) || []).filter((e) => e.handle === 'true')
+          const trueEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'true')
           for (const te of trueEdges) {
             generateNodeLines(te.target, lines, depth + 1)
           }
-          const falseEdges = (edgeMap.get(nodeId) || []).filter((e) => e.handle === 'false')
+          const falseEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'false')
           if (falseEdges.length > 0) {
             lines.push(indent + '} else {')
             for (const fe of falseEdges) {
@@ -826,7 +1041,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
             }
           }
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
@@ -836,57 +1051,57 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           const varValue = String(d.value || 'undefined')
           lines.push(indent + '// Variable: ' + varName)
           lines.push(indent + 'const ' + varName + ' = ' + varValue)
-          for (const edge of edgeMap.get(nodeId) || []) {
+          lines.push(indent + 'const ' + dataVar(nodeId, 'value') + ' = ' + varName)
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'runMacro': {
           const macroName = d.macroName || ''
-          const macroUuid = d.macroUuid || ''
           lines.push(indent + '// Run Macro: ' + macroName)
-          if (macroUuid) {
-            lines.push(indent + 'game.macros.get("' + esc(macroUuid) + '")?.execute()')
+          const macroRef = fieldVal('macroUuid', '')
+          if (macroRef && macroRef !== macroName) {
+            lines.push(indent + 'game.macros.get("' + esc(macroRef) + '")?.execute()')
           } else if (macroName) {
             lines.push(indent + 'game.macros.getName("' + esc(macroName) + '")?.execute()')
           }
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'abilityCheck': {
-          const ability = d.ability || 'str'
+          const ability = fieldVal('ability', d.ability || 'str')
           const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
-          lines.push(indent + '// Ability Check: ' + ability.toUpperCase())
+          lines.push(indent + '// Ability Check')
           lines.push(indent + 'if (token) {')
-          lines.push(indent + '  await token.actor.rollAbilityTest("' + esc(ability) + '"' + flavors + ')')
+          lines.push(indent + '  await token.actor.rollAbilityTest(String(' + ability + ')' + flavors + ')')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'skillCheck': {
-          const skill = d.skill || 'prc'
+          const skill = fieldVal('skill', d.skill || 'prc')
           const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
-          lines.push(indent + '// Skill Check: ' + skill.toUpperCase())
+          lines.push(indent + '// Skill Check')
           lines.push(indent + 'if (token) {')
-          lines.push(indent + '  await token.actor.rollSkill("' + esc(skill) + '"' + flavors + ')')
+          lines.push(indent + '  await token.actor.rollSkill(String(' + skill + ')' + flavors + ')')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'concentrationSave': {
-          const dmg = d.damageAmount || '10'
-          const dc = parseInt(dmg) || 10
-          lines.push(indent + '// Concentration Save (DC ' + dc + ')')
+          const dmg = fieldVal('damageAmount', d.damageAmount || '10')
+          lines.push(indent + '// Concentration Save')
           lines.push(indent + 'if (token) {')
-          lines.push(indent + '  await token.actor.rollConcentrationSave(' + dc + ')')
+          lines.push(indent + '  await token.actor.rollConcentrationSave(Number(' + dmg + '))')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
@@ -896,7 +1111,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.rollDeathSave({})')
           lines.push(indent + '}')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
@@ -910,7 +1125,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
             lines.push(indent + '  await table.roll()')
             lines.push(indent + '}')
           }
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
@@ -931,15 +1146,20 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
             lines.push(indent + '  playlist.play()')
             lines.push(indent + '}')
           }
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         case 'toggleScene': {
+          const sceneRef = fieldVal('scene', '')
           const sceneName = d.sceneName || ''
           lines.push(indent + '// Toggle Scene: ' + sceneName)
-          if (sceneName) {
+          if (sceneRef) {
+            lines.push(indent + 'if (' + sceneRef + ') {')
+            lines.push(indent + '  await ' + sceneRef + '.activate()')
+            lines.push(indent + '}')
+          } else if (sceneName) {
             lines.push(indent + 'const scene = game.scenes.getName("' + esc(sceneName) + '")')
             lines.push(indent + 'if (scene) {')
             lines.push(indent + '  await scene.activate()')
@@ -950,14 +1170,60 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
             lines.push(indent + '  await scene.activate()')
             lines.push(indent + '}')
           }
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
+          break
+        }
+        // Data source nodes (produce variables)
+        case 'searchActors': {
+          const query = d.actorQuery || ''
+          lines.push(indent + '// Search Actors: ' + query)
+          lines.push(indent + 'const ' + dataVar(nodeId, 'actor') + ' = ' + (query
+            ? 'game.actors.getName("' + esc(query) + '") || canvas.tokens.placeables.find(t => t.name === "' + esc(query) + '")?.actor'
+            : 'game.user.targets.first()?.actor'))
+          for (const edge of execEdgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
+          break
+        }
+        case 'searchTargets': {
+          lines.push(indent + '// Search Targets')
+          lines.push(indent + 'const ' + dataVar(nodeId, 'target') + ' = game.user.targets.first() || token')
+          for (const edge of execEdgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
+          break
+        }
+        case 'searchScenes': {
+          const sName = d.sceneName || ''
+          lines.push(indent + '// Search Scenes: ' + sName)
+          if (sName) {
+            lines.push(indent + 'const ' + dataVar(nodeId, 'scene') + ' = game.scenes.getName("' + esc(sName) + '") || game.scenes.get("' + esc(sName) + '")')
+          } else {
+            lines.push(indent + 'const ' + dataVar(nodeId, 'scene') + ' = canvas.scene')
+          }
+          for (const edge of execEdgeMap.get(nodeId) || []) {
+            if (!edge.handle) generateNodeLines(edge.target, lines, depth)
+          }
+          break
+        }
+        case 'getActorHP': {
+          lines.push(indent + '// Get Actor HP')
+          lines.push(indent + 'if (token) {')
+          lines.push(indent + '  const hpData = token.actor.system.attributes.hp')
+          lines.push(indent + '  const ' + dataVar(nodeId, 'hp') + ' = hpData.value')
+          lines.push(indent + '  const ' + dataVar(nodeId, 'maxHp') + ' = hpData.max')
+          lines.push(indent + '  const ' + dataVar(nodeId, 'tempHp') + ' = hpData.temp || 0')
+          lines.push(indent + '}')
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
           break
         }
         default: {
           lines.push(indent + '// Unknown node: ' + d.label + ' (' + d.type + ')')
-          for (const edge of edgeMap.get(nodeId) || []) {
+          for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
           }
         }
@@ -966,11 +1232,18 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
 
     const lines: string[] = []
     lines.push('// Generated from node graph: ' + (macroName || 'Untitled Macro'))
-    lines.push('// Requires a selected token on the canvas')
     lines.push('')
+    lines.push('async function executeMacro() {')
+    lines.push('  const token = canvas.tokens.controlled[0]')
+    lines.push('  if (!token) { ui.notifications.warn("Select a token first"); return }')
 
     const hasIncoming = new Set<string>()
-    edges.forEach((e) => hasIncoming.add(e.target))
+    edges.forEach((e) => {
+      // Only count execution edges for root detection
+      if (!e.sourceHandle || e.sourceHandle.startsWith('exec-') || (!e.sourceHandle && !e.targetHandle)) {
+        hasIncoming.add(e.target)
+      }
+    })
     const roots = nodes
       .filter((n) => !hasIncoming.has(n.id) && !(n.data.type as string).startsWith('_'))
       .map((n) => n.id)
@@ -991,7 +1264,8 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       }
     }
 
-    lines.push('// End of macro')
+    lines.push('}')
+    lines.push('executeMacro()')
     onCodeGenerated(lines.join('\\n'))
     toast.success('Code generated from node graph')
   }, [nodes, edges, macroName, onCodeGenerated])
