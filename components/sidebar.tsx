@@ -7,23 +7,27 @@ import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
   Map,
+  PictureInPicture2,
   Users,
   Swords,
   MessageSquare,
   Dice5,
   Code2,
+  BookOpen,
   LogOut,
 } from "lucide-react"
 import { sseManager } from "@/lib/sse"
 
 const gmNavItems = [
   { label: "Dashboard", href: "/gm", icon: LayoutDashboard },
+  { label: "Canvas", href: "/gm/canvas", icon: PictureInPicture2 },
   { label: "Scenes", href: "/gm/scenes", icon: Map },
   { label: "Actors", href: "/gm/actors", icon: Users },
   { label: "Combat", href: "/gm/combat", icon: Swords },
   { label: "Chat", href: "/gm/chat", icon: MessageSquare },
   { label: "Dice", href: "/gm/dice", icon: Dice5 },
   { label: "Macros", href: "/gm/macros", icon: Code2 },
+  { label: "Journals", href: "/gm/journals", icon: BookOpen },
 ]
 
 const playerNavItems = [

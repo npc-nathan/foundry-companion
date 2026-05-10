@@ -36,11 +36,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
           break
         case 'scene':
           qc.invalidateQueries({ queryKey: ['structure'] })
+          qc.invalidateQueries({ queryKey: ['scene'] })
+          break
+        case 'rolls':
+          qc.invalidateQueries({ queryKey: ['rolls'] })
+          qc.invalidateQueries({ queryKey: ['encounters'] })
           break
         case 'hook':
           qc.invalidateQueries({ queryKey: ['actor'] })
           qc.invalidateQueries({ queryKey: ['effects'] })
-          qc.invalidateQueries({ queryKey: ['rolls'] })
+          qc.invalidateQueries({ queryKey: ['structure'] })
+          qc.invalidateQueries({ queryKey: ['macros'] })
+          qc.invalidateQueries({ queryKey: ['journals'] })
+          qc.invalidateQueries({ queryKey: ['encounters'] })
+          qc.invalidateQueries({ queryKey: ['canvas'] })
           break
       }
     })
@@ -54,6 +63,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       sseManager.subscribe('encounter', config.relayUrl, config.apiKey, config.clientId)
       sseManager.subscribe('chat', config.relayUrl, config.apiKey, config.clientId)
       sseManager.subscribe('scene', config.relayUrl, config.apiKey, config.clientId)
+      sseManager.subscribe('rolls', config.relayUrl, config.apiKey, config.clientId)
+      sseManager.subscribe('hook', config.relayUrl, config.apiKey, config.clientId)
     }
   }, [status.connected, config.relayUrl, config.apiKey, config.clientId])
 

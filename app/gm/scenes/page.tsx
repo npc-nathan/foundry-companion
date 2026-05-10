@@ -27,7 +27,6 @@ export default function GMScenesPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['structure', 'Scene'],
     queryFn: () => relay.structure('Scene', 'true') as any,
-    refetchInterval: 30000,
   });
 
   const activateMutation = useMutation({

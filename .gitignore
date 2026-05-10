@@ -39,3 +39,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Agentic Support Files
+.hermes
+CLAUDE.md
+AGENTS.md
+
+# vscode
+.vscode
+
+# debug files
+debug_ac.js
+debug_ac2.js
+*.orig
+*.tmp
+*.bak
+*.swp
+*.swo

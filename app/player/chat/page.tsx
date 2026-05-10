@@ -67,7 +67,6 @@ export default function PlayerChatPage() {
   const { data: rawMessages, isLoading } = useQuery({
     queryKey: ['chat-messages'],
     queryFn: () => relay.getChatMessages(50),
-    refetchInterval: 3000,
   });
 
   const messages: ChatMessage[] = [...((rawMessages as any)?.data?.messages || [])].reverse();

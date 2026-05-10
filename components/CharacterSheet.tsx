@@ -987,14 +987,12 @@ export default function CharacterSheet({ uuid, isLoading }: { uuid: string; isLo
     queryKey: ['actor', uuid],
     queryFn: () => relay.get(uuid),
     enabled: !!uuid,
-    refetchInterval: 15000,
   })
 
   const { data: effectsData } = useQuery({
     queryKey: ['effects', uuid],
     queryFn: () => relay.getActorEffects(uuid),
     enabled: !!uuid,
-    refetchInterval: 15000,
   })
 
   const isLoading_ = isLoading || loading

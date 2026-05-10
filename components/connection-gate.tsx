@@ -79,6 +79,8 @@ export function ConnectionGate() {
           sseManager.subscribe('encounter', config.relayUrl, config.apiKey, config.clientId)
           sseManager.subscribe('chat', config.relayUrl, config.apiKey, config.clientId)
           sseManager.subscribe('scene', config.relayUrl, config.apiKey, config.clientId)
+          sseManager.subscribe('rolls', config.relayUrl, config.apiKey, config.clientId)
+          sseManager.subscribe('hook', config.relayUrl, config.apiKey, config.clientId)
         } catch {
           // Fall through to normal connect flow
           setLoading(false)
@@ -170,6 +172,8 @@ export function ConnectionGate() {
     sseManager.subscribe('encounter', relayUrl, apiKey, client.clientId)
     sseManager.subscribe('chat', relayUrl, apiKey, client.clientId)
     sseManager.subscribe('scene', relayUrl, apiKey, client.clientId)
+    sseManager.subscribe('rolls', relayUrl, apiKey, client.clientId)
+    sseManager.subscribe('hook', relayUrl, apiKey, client.clientId)
   }, [relayUrl, apiKey, role, selectedClient, clients, setConfig, setConnected])
 
   const handleBack = useCallback(() => {

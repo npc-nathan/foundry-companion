@@ -69,6 +69,113 @@ export const relay = {
   health: () =>
     fetch(`${getUrl('/api/health')}`, { headers: RELAY_HEADERS() }).then((r) => r.json()),
 
+  // ─── Binary helper ──────────────────────────────────────
+  /** Fetch binary data (images, etc.) from the relay proxy */
+  async getBinary(path: string): Promise<Blob> {
+    const base = getUrl(path.startsWith('/') ? path : `/${path}`);
+    const res = await fetch(base, { headers: RELAY_HEADERS() });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    return res.blob();
+  },
+
+  // ─── Canvas / Scene Rendering ────────────────────────────
+
+  /** Get a fully rendered screenshot of a scene (tokens, lights, walls rendered) */
+  getSceneImage(params?: { sceneId?: string; active?: boolean }): Promise<Blob> {
+    const q = new URLSearchParams();
+    if (params?.sceneId) q.set('sceneId', params.sceneId);
+    if (params?.active) q.set('active', 'true');
+    const qs = q.toString();
+    return this.getBinary(`/scene/image${qs ? `?${qs}` : ''}`);
+  },
+
+  /** Get the raw background image of a scene (no overlays) */
+  getSceneImageRaw(params?: { sceneId?: string; active?: boolean }): Promise<Blob> {
+    const q = new URLSearchParams();
+    if (params?.sceneId) q.set('sceneId', params.sceneId);
+    if (params?.active) q.set('active', 'true');
+    const qs = q.toString();
+    return this.getBinary(`/scene/image/raw${qs ? `?${qs}` : ''}`);
+  },
+
+  /** Get scene data (with all embedded documents) */
+  getScene(params?: { sceneId?: string; active?: boolean; all?: boolean }): Promise<unknown> {
+    const q = new URLSearchParams();
+    if (params?.sceneId) q.set('sceneId', params.sceneId);
+    if (params?.active) q.set('active', 'true');
+    if (params?.all) q.set('all', 'true');
+    const qs = q.toString();
+    return apiGet(`/scene${qs ? `?${qs}` : ''}`);
+  },
+
+  // ─── Canvas Embedded Documents ──────────────────────────
+
+  /** Get canvas embedded documents (tokens, walls, lights, etc.) */
+  getCanvasDocuments(documentType: string, sceneId?: string): Promise<unknown> {
+    return apiGet(`/canvas/${documentType}`, sceneId ? { sceneId } : undefined);
+  },
+
+  /** Create canvas embedded document(s) */
+  createCanvasDocument(
+    documentType: string,
+    data: Record<string, unknown> | Record<string, unknown>[],
+    sceneId?: string
+  ): Promise<unknown> {
+    return apiPost(`/canvas/${documentType}`, { data }, sceneId ? { sceneId } : undefined);
+  },
+
+  /** Update a canvas embedded document */
+  updateCanvasDocument(
+    documentType: string,
+    documentId: string,
+    data: Record<string, unknown>,
+    sceneId?: string
+  ): Promise<unknown> {
+    return apiPut(`/canvas/${documentType}`, { documentId, data }, sceneId ? { sceneId } : undefined);
+  },
+
+  /** Delete a canvas embedded document */
+  deleteCanvasDocument(documentType: string, documentId: string, sceneId?: string): Promise<void> {
+    const q = new URLSearchParams({ documentId });
+    if (sceneId) q.set('sceneId', sceneId);
+    return fetch(`${getUrl(`/canvas/${documentType}`)}?${q.toString()}`, {
+      method: 'DELETE',
+      headers: RELAY_HEADERS(),
+    }).then((r) => r.text()) as Promise<void>;
+  },
+
+  // ─── Token Movement ──────────────────────────────────────
+
+  /** Move a token to specific coordinates (optionally animated with waypoints) */
+  moveToken(params: {
+    x: number;
+    y: number;
+    uuid?: string;
+    name?: string;
+    waypoints?: Array<{ x: number; y: number }>;
+    animate?: boolean;
+    sceneId?: string;
+  }): Promise<unknown> {
+    return apiPost('/move-token', params);
+  },
+
+  // ─── Distance Measurement ──────────────────────────────
+
+  /** Measure distance between two points or tokens */
+  measureDistance(params: {
+    originX?: number;
+    originY?: number;
+    targetX?: number;
+    targetY?: number;
+    originUuid?: string;
+    originName?: string;
+    targetUuid?: string;
+    targetName?: string;
+    sceneId?: string;
+  }): Promise<unknown> {
+    return apiGet('/measure-distance', params as Record<string, string>);
+  },
+
   structure: (types = 'Actor,Scene,Item', includeEntityData = 'false') =>
     apiGet<unknown>('/structure', { types, includeEntityData }),
 
@@ -318,4 +425,26 @@ export const relay = {
 
   mcpCall: (toolName: string, params: Record<string, unknown>) =>
     apiPost(`/${toolName}`, params),
+
+  // ─── Journals ─────────────────────────────────────────────
+
+  getJournals: () =>
+    apiGet<unknown>('/structure', { types: 'JournalEntry', includeEntityData: 'true', recursive: 'true' }),
+
+  getJournal: (uuid: string) =>
+    apiGet<unknown>('/get', { uuid }),
+
+  createJournal: (params: { name: string; pages: Array<{ name: string; content: string; type?: string }>; folder?: string }) => {
+    const { folder, ...data } = params;
+    return apiPost('/create', { entityType: 'JournalEntry', data, ...(folder ? { folder } : {}) });
+  },
+
+  updateJournal: (uuid: string, data: Record<string, unknown>) =>
+    apiPut('/update', { data }, { uuid }),
+
+  deleteJournal: (uuid: string) =>
+    fetch(`${getUrl('/delete')}?uuid=${uuid}`, {
+      method: 'DELETE',
+      headers: RELAY_HEADERS(),
+    }).then((r) => r.text()),
 };

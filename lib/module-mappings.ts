@@ -101,14 +101,14 @@ const dfredsCE: ModuleMapping = {
         },
       ],
       generateCode: (d) => [
-        '// --- DFreds Convenient Effects: Apply ---',
+        '// --- DFreds Convenient Effects: Apply (e.g. applies Burning to Goblin) ---',
         d.effectName ? `const effectName = "${esc(d.effectName)}"` : 'const effectName = "Burning"',
         d.target
           ? `const targetToken = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const targetToken = token',
         "if (!targetToken) { ui.notifications.warn('No target selected'); return }",
         d.duration && parseInt(d.duration) > 0
-          ? `game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid, { seconds: ${parseInt(d.duration) * 6})`
+          ? `game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid, { seconds: ${parseInt(d.duration) * 6} })`
           : 'game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid)',
         "ui.notifications.info(`Applied ${effectName}`)",
         '',
@@ -309,12 +309,12 @@ const fxmaster: ModuleMapping = {
         { key: 'intensity', label: 'Intensity (0-1)', type: 'number', placeholder: '0.5' },
       ],
       generateCode: (d) => [
-        '// --- FXMaster: Set Weather ---',
+        '// --- FXMaster: Set Weather (e.g. rain, snow, thunderstorm) ---',
         `const weather = "${esc(d.weatherType || 'clear')}"`,
         'if (weather === "clear") {',
         '  canvas.scene.update({"flags.fxmaster": {effects: []}})',
         '} else {',
-        `  canvas.scene.update({"flags.fxmaster.effects": [weather]})`,
+        `  canvas.scene.update({"flags.fxmaster": {effects: [weather]}})`,
         '}',
         '',
       ],
@@ -341,7 +341,7 @@ const fxmaster: ModuleMapping = {
         },
       ],
       generateCode: (d) => [
-        '// --- FXMaster: Apply Filter ---',
+        '// --- FXMaster: Apply Filter (e.g. predator, underwater, night) ---',
         `const filter = "${esc(d.filterType || '')}"`,
         "if (!filter) { ui.notifications.warn('No filter selected'); return }",
         'canvas.effects.filters.set(filter, true)',

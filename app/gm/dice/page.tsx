@@ -107,7 +107,6 @@ export default function GMDicePage() {
   const { data: rollsData } = useQuery({
     queryKey: ['rolls'],
     queryFn: () => relay.getRolls(10),
-    refetchInterval: 5000,
   });
 
   const actors = extractActors(actorsData);

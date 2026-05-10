@@ -32,13 +32,11 @@ export default function GMDashboard() {
   const { data: structure } = useQuery({
     queryKey: ['structure', 'Actor,Scene'],
     queryFn: () => relay.structure('Actor,Scene'),
-    refetchInterval: 30000,
   });
 
   const { data: encounters } = useQuery({
     queryKey: ['encounters'],
     queryFn: () => relay.encounters(),
-    refetchInterval: 10000,
   });
 
   const { data: session } = useQuery({
@@ -50,7 +48,7 @@ export default function GMDashboard() {
           'x-client-id': config.clientId || 'companion-app',
         },
       }).then((r) => r.json()),
-    refetchInterval: 15000,
+    refetchInterval: 60000,
   });
 
   const actorCount = structure ? flattenActorCount(structure) : '?';

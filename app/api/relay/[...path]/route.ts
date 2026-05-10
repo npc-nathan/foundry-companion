@@ -65,6 +65,21 @@ async function handleRequest(
       })
     }
 
+    // SSE: stream the response instead of buffering it
+    if (contentType.includes('text/event-stream')) {
+      const { readable, writable } = new TransformStream()
+      res.body?.pipeTo(writable)
+      return new NextResponse(readable, {
+        status: res.status,
+        headers: {
+          'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
+          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache',
+        },
+      })
+    }
+
     const data = await res.text()
     return new NextResponse(data, {
       status: res.status,

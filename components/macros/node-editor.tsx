@@ -49,10 +49,23 @@ import {
   Skull,
   Target,
   Search,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { relay } from '@/lib/relay'
 import { getModuleMapping, type ModuleNodeProperty } from '@/lib/module-mappings'
+import {
+  getNodeFields,
+  type NodeFieldDef,
+} from '@/lib/node-schemas'
+import { ExpressionEditor, type ExpressionConfig, expressionConfigToCode } from '@/components/macros/expression-editor'
+import { edgeTypes } from '@/components/macros/data-edge'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Dialog } from '@/components/ui/dialog'
+import {
+  getNodeSchema,
+  getPortFields,
+} from '@/lib/node-schemas'
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -73,6 +86,8 @@ interface CustomNodeData {
   effectName?: string
   // condition
   condition?: string
+  compareField?: string
+  compareValue?: string
   // variable
   name?: string
   value?: string
@@ -260,7 +275,7 @@ const staticPaletteItems: PaletteItem[] = [
     category: 'logic',
     description: 'If/else branching',
     icon: <Blocks className="h-3 w-3 text-amber-400" />,
-    defaultData: { condition: 'true' },
+    defaultData: { condition: 'true', compareField: 'name', compareValue: '' },
   },
   // Data
   {
@@ -349,17 +364,52 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
       {/* Data Inputs (left side) */}
       {dataPorts
         .filter((p) => p.type === 'input')
-        .map((port, i) => (
-          <Handle
-            key={`data-in-${port.id}`}
-            type="target"
-            position={Position.Left}
-            id={`data-in-${port.id}`}
-            className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
-            style={{ top: `${35 + i * 20}%` }}
-            title={port.label}
-          />
-        ))}
+        .map((port, i) => {
+          const schema = getNodeSchema(data.type)
+          const portSchema = schema?.outputs?.find((p) => p.portId === port.id)
+          const fields = portSchema?.fields
+          const example = schema?.example?.[port.id]
+
+          return (
+            <Tooltip key={`data-in-${port.id}`}>
+              <TooltipTrigger>
+                <Handle
+                  type="target"
+                  position={Position.Left}
+                  id={`data-in-${port.id}`}
+                  className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
+                  style={{ top: `${35 + i * 20}%` }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-xs p-2">
+                <div className="text-xs font-semibold mb-1">{port.label}</div>
+                <div className="text-[10px] text-muted-foreground">Type: {port.dataType}</div>
+                {fields && fields.length > 0 && fields[0].key !== '' && (
+                  <div className="mt-1.5 text-[10px]">
+                    <div className="font-medium mb-0.5">Available fields:</div>
+                    {fields.slice(0, 8).map((f) => (
+                      <div key={f.key} className="flex gap-2 items-baseline">
+                        <span className="text-muted-foreground">{f.label}</span>
+                        <span className="text-[9px] text-muted-foreground/50">({f.type})</span>
+                      </div>
+                    ))}
+                    {fields.length > 8 && (
+                      <div className="text-[9px] text-muted-foreground/50 mt-0.5">
+                        +{fields.length - 8} more fields...
+                      </div>
+                    )}
+                  </div>
+                )}
+                {example !== undefined && (
+                  <div className="mt-1 text-[10px]">
+                    <span className="text-muted-foreground">e.g. </span>
+                    <code className="text-[9px] bg-muted px-1 rounded">{String(example)}</code>
+                  </div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
 
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -370,21 +420,61 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
           </div>
         </div>
       </div>
-
       {/* Data Outputs (right side) */}
       {dataPorts
         .filter((p) => p.type === 'output')
-        .map((port, i) => (
-          <Handle
-            key={`data-out-${port.id}`}
-            type="source"
-            position={Position.Right}
-            id={`data-out-${port.id}`}
-            className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
-            style={{ top: `${35 + i * 20}%` }}
-            title={port.label}
-          />
-        ))}
+        .filter((p) => !isCondition || (p.id !== 'trueTarget' && p.id !== 'falseTarget'))
+        .map((port, i) => {
+          const schema = getNodeSchema(data.type)
+          const portSchema = schema?.outputs?.find((p) => p.portId === port.id)
+          const fields = portSchema?.fields
+          const example = schema?.example?.[port.id]
+
+          return (
+            <Tooltip key={`data-out-${port.id}`}>
+              <TooltipTrigger>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`data-out-${port.id}`}
+                  className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
+                  style={{ top: `${35 + i * 20}%` }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs p-2">
+                <div className="text-xs font-semibold mb-1">{port.label}</div>
+                <div className="text-[10px] text-muted-foreground">Type: {port.dataType}</div>
+                {fields && fields.length > 0 && fields[0].key !== '' && (
+                  <div className="mt-1.5 text-[10px]">
+                    <div className="font-medium mb-0.5">Available fields:</div>
+                    {fields.slice(0, 10).map((f) => (
+                      <div key={f.key} className="flex gap-2 items-baseline">
+                        <span className="text-muted-foreground">{f.label}</span>
+                        <span className="text-[9px] text-muted-foreground/50">({f.type})</span>
+                      </div>
+                    ))}
+                    {fields.length > 10 && (
+                      <div className="text-[9px] text-muted-foreground/50 mt-0.5">
+                        +{fields.length - 10} more fields...
+                      </div>
+                    )}
+                  </div>
+                )}
+                {fields && fields.length > 0 && fields[0].key === '' && (
+                  <div className="mt-1 text-[10px]">
+                    <span className="text-muted-foreground">Scalar value — connects directly</span>
+                  </div>
+                )}
+                {example !== undefined && (
+                  <div className="mt-1 text-[10px]">
+                    <span className="text-muted-foreground">e.g. </span>
+                    <code className="text-[9px] bg-muted px-1 rounded">{typeof example === 'object' ? JSON.stringify(example) : String(example)}</code>
+                  </div>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
 
       {/* Execution: Source handle (bottom) */}
       <Handle
@@ -573,6 +663,12 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
   const [sectionsCollapsed, setSectionsCollapsed] = useState<Record<string, boolean>>({})
   // Cache for dynamic property options
   const [dynamicOptions, setDynamicOptions] = useState<Record<string, { value: string; label: string }[]>>({})
+  // Expression editor state
+  const [exprEditorOpen, setExprEditorOpen] = useState(false)
+  const [exprEditorFieldKey, setExprEditorFieldKey] = useState<string | null>(null)
+  const [exprEditorConfigs, setExprEditorConfigs] = useState<Record<string, ExpressionConfig>>({})
+  // Node details dialog (double-click)
+  const [detailsDialogNode, setDetailsDialogNode] = useState<MacroNode | null>(null)
 
   // ─── Fetch macros from relay ────────────────────────────
   useEffect(() => {
@@ -787,21 +883,30 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       // Validate: don't mix data and execution handles
       if (!isDataConnection && !isExecutionConnection) return
 
+      // Extract dataType from the source port definition for edge labels
+      let dataType = 'any'
+      if (isDataConnection && connection.source) {
+        const sourceNode = nodes.find((n) => n.id === connection.source)
+        const portId = connection.sourceHandle?.replace('data-out-', '')
+        if (sourceNode && portId) {
+          const portDefs = NODE_DATA_PORTS[sourceNode.data.type] || []
+          const portDef = portDefs.find((p) => p.id === portId)
+          if (portDef) dataType = portDef.dataType
+        }
+      }
+
       const edge: Edge = {
         id: `edge-${Date.now()}`,
         source: connection.source,
         target: connection.target,
         sourceHandle: connection.sourceHandle ?? undefined,
         targetHandle: connection.targetHandle ?? undefined,
-        type: isDataConnection ? 'dataEdge' : undefined,
-        style: isDataConnection
-          ? { stroke: '#22d3ee', strokeWidth: 2, strokeDasharray: '5,5' }
-          : { stroke: '#555', strokeWidth: 2 },
-        animated: false,
+        type: 'custom',
+        data: { dataType: isDataConnection ? dataType : 'exec' },
       }
       setEdges((eds) => [...eds, edge])
     },
-    [setEdges]
+    [setEdges, nodes]
   )
 
   const addNodeToCanvas = useCallback(
@@ -836,6 +941,10 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     setEdges((eds) => eds.filter((e) => e.source !== selectedNode && e.target !== selectedNode))
     setSelectedNode(null)
   }, [selectedNode, setNodes, setEdges])
+
+  const setSelectedNodeDetailsDialog = useCallback((node: MacroNode) => {
+    setDetailsDialogNode(node)
+  }, [])
 
   const updateNodeData = useCallback(
     (nodeId: string, field: string, value: string) => {
@@ -941,7 +1050,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
       switch (d.type) {
         case 'rollDice': {
           const formula = d.formula || '1d20'
-          lines.push(indent + '// Roll Dice: ' + formula)
+          lines.push(indent + '// Roll Dice: ' + formula + ' -> e.g. result: 17')
           lines.push(indent + 'const roll = new Roll("' + esc(formula) + '")')
           lines.push(indent + 'await roll.evaluate({ async: true })')
           if (d.flavor) lines.push(indent + 'roll.toMessage({ flavor: "' + esc(d.flavor) + '" })')
@@ -954,15 +1063,21 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'dealDamage': {
           const damount = fieldVal('amount', d.amount || '10')
           const dmgAmountVal = '(' + damount + ')'
-          lines.push(indent + '// Deal Damage')
+          lines.push(indent + '// Deal Damage -> e.g. -10 HP, chat: "Goblin takes 10 damage."')
           const targetExpr = fieldVal('target', 'token')
           lines.push(indent + 'const dmgTarget = ' + targetExpr)
           lines.push(indent + 'const actorRef = dmgTarget?.actor || dmgTarget')
           lines.push(indent + 'if (actorRef) {')
+          lines.push(indent + '  let dmgTotal = ' + dmgAmountVal)
+          lines.push(indent + '  // Support dice formulas like 1d8+3')
+          lines.push(indent + "  if (typeof dmgTotal === 'string' && /^\\d*d\\d/i.test(dmgTotal)) {")
+          lines.push(indent + '    const r = await new Roll(dmgTotal).evaluate({ async: true })')
+          lines.push(indent + '    dmgTotal = r.total')
+          lines.push(indent + '  }')
           lines.push(indent + '  const cur = actorRef.system.attributes.hp.value || 0')
-          lines.push(indent + '  const newHp = Math.max(0, cur - ' + dmgAmountVal + ')')
+          lines.push(indent + '  const newHp = Math.max(0, cur - dmgTotal)')
           lines.push(indent + '  await actorRef.update({ "system.attributes.hp.value": newHp })')
-          lines.push(indent + '  ChatMessage.create({ content: (dmgTarget.name || actorRef.name) + " takes " + ' + dmgAmountVal + ' + " damage." })')
+          lines.push(indent + '  ChatMessage.create({ content: (dmgTarget.name || actorRef.name) + " takes " + dmgTotal + " damage." })')
           lines.push(indent + '}')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -972,7 +1087,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'healTarget': {
           const hamount = fieldVal('amount', d.amount || '10')
           const healAmountVal = '(' + hamount + ')'
-          lines.push(indent + '// Heal Target')
+          lines.push(indent + '// Heal Target -> e.g. +10 HP, chat shows name heals for amount.')
           const htargetExpr = fieldVal('target', 'token')
           lines.push(indent + 'const healTarget_ = ' + htargetExpr)
           lines.push(indent + 'const hActorRef = healTarget_?.actor || healTarget_')
@@ -991,7 +1106,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'sendChat': {
           const content = fieldVal('content', String(d.content || ''))
           const mode = d.mode === 'IC' ? 'IC' : 'OOC'
-          lines.push(indent + '// Send Chat Message')
+          lines.push(indent + "// Send Chat Message -> e.g. OOC: The goblin collapses!")
           lines.push(indent + 'ChatMessage.create({')
           lines.push(indent + '  content: String(' + content + '),')
           lines.push(indent + '  type: CONST.CHAT_MESSAGE_TYPES.' + mode + ',')
@@ -1005,7 +1120,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           const effectName = fieldVal('effectName', String(d.effectName || ''))
           const targetExpr = fieldVal('target', 'token')
           const dur = d.amount || '60'
-          lines.push(indent + '// Apply Effect')
+          lines.push(indent + '// Apply Effect -> e.g. applies Burning for 60s to selected token')
           lines.push(indent + 'const applyTarget = ' + targetExpr)
           lines.push(indent + 'const applyActor = applyTarget?.actor || applyTarget')
           lines.push(indent + 'if (applyActor) {')
@@ -1023,7 +1138,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'applyStatus': {
           const statusId = fieldVal('statusId', String(d.statusId || 'poisoned'))
-          lines.push(indent + '// Apply Status')
+          lines.push(indent + '// Apply Status -> e.g. toggles poisoned icon on selected token')
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.toggleStatusEffect(String(' + statusId + '), { active: true })')
           lines.push(indent + '}')
@@ -1033,9 +1148,25 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           break
         }
         case 'condition': {
-          const cond = fieldVal('condition', String(d.condition || 'true'))
-          lines.push(indent + '// Condition')
-          lines.push(indent + 'if (' + cond + ') {')
+          // Check if there's an expression config stored on the node
+          const rawExprCfg = String(d._exprConfig_condition || '')
+          let exprCode: string | null = null
+          if (rawExprCfg) {
+            try {
+              const parsedConfig: ExpressionConfig = JSON.parse(rawExprCfg)
+              exprCode = expressionConfigToCode(parsedConfig, nodeId, nodes.map((n) => ({ id: n.id, data: n.data as unknown as Record<string, unknown> })))
+            } catch {}
+          }
+          if (exprCode) {
+            lines.push(indent + `// Condition -> Expression Builder: ${exprCode}`)
+            lines.push(indent + `if (${exprCode}) {`)
+          } else {
+            // Fallback: raw expression text or data pipe
+            const pipedVar = dataForInput(nodeId, 'condition')
+            const cond = pipedVar || fieldVal('condition', String(d.condition || 'true'))
+            lines.push(indent + '// Condition -> e.g. if (rollTotal > 10) { ... } else { ... }')
+            lines.push(indent + 'if (' + cond + ') {')
+          }
           const trueEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'true')
           for (const te of trueEdges) {
             generateNodeLines(te.target, lines, depth + 1)
@@ -1057,7 +1188,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           const varName = String(d.name || 'myVar')
           const varValue = String(d.value || '')
           const safeValue = varValue || 'undefined'
-          lines.push(indent + '// Variable: ' + varName)
+          lines.push(indent + '// Variable: ' + varName + ' -> e.g. const ' + varName + ' = 42')
           lines.push(indent + 'const ' + varName + ' = ' + safeValue)
           lines.push(indent + 'const ' + dataVar(nodeId, 'value') + ' = ' + varName)
           for (const edge of execEdgeMap.get(nodeId) || []) {
@@ -1067,7 +1198,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'runMacro': {
           const macroName = d.macroName || ''
-          lines.push(indent + '// Run Macro: ' + macroName)
+          lines.push(indent + '// Run Macro: ' + macroName + ' -> executes Fireball from Foundry macros')
           const macroRef = fieldVal('macroUuid', '')
           if (macroRef && macroRef !== macroName) {
             lines.push(indent + 'game.macros.get("' + esc(macroRef) + '")?.execute()')
@@ -1082,7 +1213,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'abilityCheck': {
           const ability = fieldVal('ability', d.ability || 'str')
           const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
-          lines.push(indent + '// Ability Check')
+          lines.push(indent + '// Ability Check -> e.g. STR check: d20 + modifier, result shown in chat')
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.rollAbilityTest(String(' + ability + ')' + flavors + ')')
           lines.push(indent + '}')
@@ -1094,7 +1225,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'skillCheck': {
           const skill = fieldVal('skill', d.skill || 'prc')
           const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : ''
-          lines.push(indent + '// Skill Check')
+          lines.push(indent + '// Skill Check -> e.g. Perception check: d20 + WIS, result shown in chat')
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.rollSkill(String(' + skill + ')' + flavors + ')')
           lines.push(indent + '}')
@@ -1105,7 +1236,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'concentrationSave': {
           const dmg = fieldVal('damageAmount', d.damageAmount || '10')
-          lines.push(indent + '// Concentration Save')
+          lines.push(indent + '// Concentration Save -> e.g. DC 10 CON save for 14 damage taken')
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.rollConcentrationSave(Number(' + dmg + '))')
           lines.push(indent + '}')
@@ -1115,7 +1246,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           break
         }
         case 'deathSave': {
-          lines.push(indent + '// Death Save')
+          lines.push(indent + '// Death Save -> e.g. d20 roll, success/fail tracked automatically')
           lines.push(indent + 'if (token) {')
           lines.push(indent + '  await token.actor.rollDeathSave({})')
           lines.push(indent + '}')
@@ -1127,7 +1258,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'rollTable': {
           const tableName = d.tableName || ''
           const tableId = d.tableId || ''
-          lines.push(indent + '// Roll Table: ' + (tableName || tableId))
+          lines.push(indent + '// Roll Table: ' + (tableName || tableId) + " -> e.g. rolled: Potion of Healing")
           const tableRef = tableName ? 'game.tables.getName("' + esc(tableName) + '")' : (tableId ? 'game.tables.get("' + esc(tableId) + '")' : 'null')
           lines.push(indent + 'const table = ' + tableRef)
           lines.push(indent + 'if (table) {')
@@ -1142,7 +1273,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'playSound': {
           const playlistName = d.playlistName || ''
           const soundName = d.soundName || ''
-          lines.push(indent + '// Play Sound')
+          lines.push(indent + '// Play Sound -> e.g. plays Thunderclap from Battle Themes playlist')
           if (playlistName && soundName) {
             lines.push(indent + 'const playlist = game.playlists.getName("' + esc(playlistName) + '")')
             lines.push(indent + 'if (playlist) {')
@@ -1163,7 +1294,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         case 'toggleScene': {
           const sceneRef = fieldVal('scene', '')
           const sceneName = d.sceneName || ''
-          lines.push(indent + '// Toggle Scene: ' + sceneName)
+          lines.push(indent + '// Toggle Scene: ' + sceneName + ' -> e.g. activates The Dark Forest')
           if (sceneRef) {
             lines.push(indent + 'if (' + sceneRef + ') {')
             lines.push(indent + '  await ' + sceneRef + '.activate()')
@@ -1187,7 +1318,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         // Data source nodes (produce variables)
         case 'searchActors': {
           const query = d.actorQuery || ''
-          lines.push(indent + '// Search Actors: ' + query)
+          lines.push(indent + '// Search Actors: ' + query + " -> e.g. finds Gandalf actor by name")
           lines.push(indent + 'const ' + dataVar(nodeId, 'actor') + ' = ' + (query
             ? 'game.actors.getName("' + esc(query) + '") || canvas.tokens.placeables.find(t => t.name === "' + esc(query) + '")?.actor'
             : 'game.user.targets.first()?.actor'))
@@ -1197,7 +1328,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           break
         }
         case 'searchTargets': {
-          lines.push(indent + '// Search Targets')
+          lines.push(indent + '// Search Targets -> e.g. gets first targeted token on canvas')
           lines.push(indent + 'const ' + dataVar(nodeId, 'target') + ' = game.user.targets.first() || token')
           for (const edge of execEdgeMap.get(nodeId) || []) {
             if (!edge.handle) generateNodeLines(edge.target, lines, depth)
@@ -1206,7 +1337,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
         }
         case 'searchScenes': {
           const sName = d.sceneName || ''
-          lines.push(indent + '// Search Scenes: ' + sName)
+          lines.push(indent + '// Search Scenes: ' + sName + ' -> e.g. finds The Dark Forest scene')
           if (sName) {
             lines.push(indent + 'const ' + dataVar(nodeId, 'scene') + ' = game.scenes.getName("' + esc(sName) + '") || game.scenes.get("' + esc(sName) + '")')
           } else {
@@ -1218,7 +1349,7 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           break
         }
         case 'getActorHP': {
-          lines.push(indent + '// Get Actor HP')
+          lines.push(indent + '// Get Actor HP -> e.g. returns hp: 42, maxHp: 50, tempHp: 5')
           lines.push(indent + 'const hpActor = token?.actor')
           lines.push(indent + 'if (hpActor) {')
           lines.push(indent + '  const hpData = hpActor.system.attributes.hp')
@@ -1290,9 +1421,11 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     content: 'Message',
     mode: 'Mode',
     effectName: 'Effect Name',
-    target: 'Target',
-    amount: 'Duration (seconds)',
-    condition: 'Condition',
+    target: 'Target Override',
+    amount: 'Amount',
+    condition: 'Expression',
+    compareField: 'Field to Check',
+    compareValue: 'Equals',
     name: 'Variable Name',
     value: 'Value',
     macroName: 'Macro Name',
@@ -1327,38 +1460,53 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
     wallName: 'Wall/Door Ref',
   }
 
+  // Node-type-specific field label overrides
+  const nodeFieldLabels: Record<string, Record<string, string>> = {
+    dealDamage: { amount: 'Damage Amount', target: 'Target Override' },
+    healTarget: { amount: 'Heal Amount', target: 'Target Override' },
+    applyEffect: { amount: 'Duration (seconds)', target: 'Target Override' },
+    condition: { condition: 'Expression (type or pipe data)', compareField: 'Field to Check', compareValue: 'Equals' },
+    sendChat: { content: 'Message (or connect data)' },
+    concentrationSave: { damageAmount: 'Damage (or connect data)' },
+  }
+
   const fieldPlaceholders: Record<string, string> = {
-    formula: 'e.g. 1d20+5',
-    flavor: 'Optional flavor text',
-    content: 'Your message here',
+    formula: 'e.g. 1d20+5 → 17',
+    flavor: 'e.g. "Sneak Attack!"',
+    content: 'e.g. "The goblin collapses!"',
     mode: 'OOC or IC',
-    effectName: 'Burning, Poisoned, etc.',
-    target: 'selected',
-    amount: 'Seconds',
-    condition: 'e.g. rollResult > 10',
+    effectName: 'e.g. Burning, Poisoned, Bless',
+    target: 'token, @token-uuid, or Actor name',
+    amount: 'e.g. 60 (seconds), or connect data pipe',
+    condition: 'e.g. roll > 10, 1d20+5 >= 15',
+    compareField: 'e.g. name, type, hp, level',
+    compareValue: 'e.g. Gandalf or 42',
     trueLabel: 'True',
     falseLabel: 'False',
     name: 'myVar',
-    value: '42',
-    macroName: 'Macro name',
-    macroUuid: 'Macro.UUID',
+    value: '42 or "hello" or rollResult',
+    macroName: '"Healing Word" or "Fireball"',
+    macroUuid: 'Macro UUID from palette',
     ability: 'str, dex, con, int, wis, cha',
     skill: 'prc, inv, ath, acr, ste, ...',
-    tableName: 'e.g. Treasure Table A',
-    playlistName: 'e.g. Battle Music',
-    soundName: 'e.g. Thunder01',
-    sceneName: 'e.g. The Tavern',
-    statusId: 'poisoned, blinded, etc.',
-    damageAmount: '10',
-    effectFile: 'modules/jb2a/...',
+    tableName: 'e.g. "Treasure Horde"',
+    tableId: 'Optional UUID if name fails',
+    playlistName: 'e.g. "Battle Themes"',
+    soundName: 'e.g. "Thunderclap"',
+    sceneName: 'e.g. "The Dark Forest"',
+    sceneId: 'Optional UUID if name fails',
+    statusId: 'poisoned, blinded, prone, etc.',
+    damageAmount: 'e.g. 14 (damage taken this turn)',
+    effectFile: 'modules/jb2a_pack/.../spell_blast.webm',
     soundFile: 'modules/.../sound.ogg',
-    itemName: 'e.g. Longsword',
-    targetName: 'e.g. Goblin 1',
-    tileName: 'e.g. Trap Door',
-    elevation: '1',
-    rangeBottom: '0',
-    rangeTop: '5',
-    wallName: 'Wall ID or direction',
+    itemName: 'e.g. "Longsword +1"',
+    targetName: 'e.g. "Goblin Archer"',
+    tileName: 'e.g. "Spike Trap"',
+    elevation: '1 → ground, 2 → first floor',
+    rangeBottom: '0 = ground level',
+    rangeTop: '5 = ceiling height',
+    wallName: 'Wall ID or compass: N/S/E/W',
+    actorQuery: 'e.g. "Gandalf" or "Goblin #3"',
   }
 
   // ─── Determine if a field should be a select dropdown ─────
@@ -1520,7 +1668,9 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
           onEdgesChange={onEdgesChange as OnEdgesChange<MacroEdge>}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodeClick={(_, node) => setSelectedNode(node.id)}
+          onNodeDoubleClick={(_, node) => setSelectedNodeDetailsDialog(node)}
           onPaneClick={() => setSelectedNode(null)}
           fitView
           deleteKeyCode="Delete"
@@ -1533,47 +1683,245 @@ function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: st
 
         {/* Selected node properties panel */}
         {selectedNode && selectedNodeData && (
-          <div className="absolute bottom-4 left-4 right-4 bg-card border rounded-lg shadow-lg p-4 max-w-md z-10">
-            <div className="text-sm font-semibold mb-3">{selectedNodeData.label} Properties</div>
-            <div className="space-y-3">
-              {Object.entries(selectedNodeData)
-                .filter(([key]) => !['type', 'label', 'category', 'description'].includes(key))
-                .map(([key, val]) => (
-                  <div key={key}>
-                    <Label className="text-xs capitalize">
-                      {fieldLabels[key] || key.replace(/([A-Z])/g, ' $1').trim()}
-                    </Label>
-                    {isSelectField(key, selectedNodeData) ? (
-                      <Select
-                        value={String(val ?? '')}
-                        onValueChange={(v) => updateNodeData(selectedNode!, key, v ?? '')}
-                      >
-                        <SelectTrigger className="h-8 text-xs mt-0.5">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {getSelectOptions(key, selectedNodeData).length > 0
-                            ? getSelectOptions(key, selectedNodeData).map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                                  {opt.label}
-                                </SelectItem>
-                              ))
-                            : null}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        className="h-8 text-xs mt-0.5"
-                        value={String(val ?? '')}
-                        onChange={(e) => updateNodeData(selectedNode, key, e.target.value)}
-                        placeholder={fieldPlaceholders[key] || `Enter ${key}...`}
-                      />
+          <>
+            <div className="absolute bottom-4 left-4 right-4 bg-card border rounded-lg shadow-lg p-4 max-w-md z-10">
+              <div className="text-sm font-semibold mb-3 flex items-center gap-2">
+                {selectedNodeData.label}
+                <span className="text-[10px] text-muted-foreground font-normal">Properties</span>
+              </div>
+              <div className="space-y-3">
+                {(() => {
+                  // Determine fields for this node
+                  const modId = String(selectedNodeData.moduleId || '')
+                  let fieldDefs: NodeFieldDef[]
+
+                  if (modId) {
+                    // Module-mapped nodes: get fields from module mapping
+                    const mapping = getModuleMapping(modId)
+                    const nodeDef = mapping?.nodes.find((n) => n.type === selectedNodeData.type)
+                    if (mapping && nodeDef) {
+                      fieldDefs = getNodeFields(selectedNodeData.type, modId, nodeDef.properties.map((p) => ({
+                        key: p.key,
+                        label: p.label,
+                        type: p.type,
+                        options: p.options,
+                      })))
+                    } else {
+                      fieldDefs = getNodeFields(selectedNodeData.type)
+                    }
+                  } else {
+                    fieldDefs = getNodeFields(selectedNodeData.type)
+                  }
+
+                  // Sort by displayOrder, filter hidden
+                  return fieldDefs
+                    .filter((f) => !f.hideFromPanel)
+                    .sort((a, b) => (a.displayOrder ?? 99) - (b.displayOrder ?? 99))
+                    .map((fieldDef) => {
+                      const val = selectedNodeData[fieldDef.key] as string ?? ''
+                      const rawExprCfg = selectedNodeData[`_exprConfig_${fieldDef.key}`] as string | undefined
+                      const hasExpressionCfg = !!rawExprCfg
+                      let initialExprConfig: ExpressionConfig | undefined
+                      if (rawExprCfg) {
+                        try { initialExprConfig = JSON.parse(rawExprCfg) } catch {}
+                      }
+
+                      return (
+                        <div key={fieldDef.key}>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">{fieldDef.label}</Label>
+                            {fieldDef.expressionAllowed && (
+                              <button
+                                onClick={() => {
+                                  setExprEditorFieldKey(fieldDef.key)
+                                  setExprEditorOpen(true)
+                                }}
+                                className={cn(
+                                  'text-[10px] px-1.5 py-0.5 rounded transition-colors flex items-center gap-0.5',
+                                  hasExpressionCfg
+                                    ? 'bg-cyan-900/40 text-cyan-300 hover:bg-cyan-900/60'
+                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                                )}
+                                title="Open Expression Editor"
+                              >
+                                <Code className="h-2.5 w-2.5" />
+                                fx
+                              </button>
+                            )}
+                          </div>
+                          {fieldDef.type === 'select' ? (
+                            <Select
+                              value={String(val ?? '')}
+                              onValueChange={(v) => updateNodeData(selectedNode!, fieldDef.key, v ?? '')}
+                            >
+                              <SelectTrigger className="h-8 text-xs mt-0.5">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(fieldDef.selectOptions ?? []).map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="relative">
+                              <Input
+                                className={cn(
+                                  'h-8 text-xs mt-0.5 pr-8',
+                                  hasExpressionCfg && 'border-cyan-500/40 bg-cyan-950/20'
+                                )}
+                                value={String(val ?? '')}
+                                onChange={(e) => updateNodeData(selectedNode!, fieldDef.key, e.target.value)}
+                                placeholder={
+                                  hasExpressionCfg
+                                    ? 'Expression configured — click fx to edit'
+                                    : (fieldDef.placeholder || `Enter ${fieldDef.key}...`)
+                                }
+                              />
+                              {hasExpressionCfg && (
+                                <button
+                                  onClick={() => {
+                                    updateNodeData(selectedNode!, `_exprConfig_${fieldDef.key}`, '')
+                                  }}
+                                  className="absolute right-2 top-1/2 -translate-y-0.5 text-[9px] text-muted-foreground hover:text-foreground"
+                                  title="Clear expression config"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                })()}
+              </div>
+            </div>
+
+            {/* Expression Editor Modal — rendered at z-20 to overlay properly */}
+            <div className="fixed inset-0 z-50 pointer-events-none">
+              <div className="pointer-events-auto">
+                <ExpressionEditor
+                  open={exprEditorOpen}
+                  onOpenChange={setExprEditorOpen}
+                  onSave={(config) => {
+                    if (selectedNode && exprEditorFieldKey) {
+                      updateNodeData(selectedNode, `_exprConfig_${exprEditorFieldKey}`, JSON.stringify(config))
+                    }
+                  }}
+                  fieldLabel={exprEditorFieldKey || 'Field'}
+                  fieldDataType="object"
+                  initialConfig={selectedNode && exprEditorFieldKey ? (() => {
+                    const raw = selectedNodeData[`_exprConfig_${exprEditorFieldKey}`] as string | undefined
+                    if (raw) try { return JSON.parse(raw) } catch {}
+                    return undefined
+                  })() : undefined}
+                  allNodes={nodes}
+                  allEdges={edges}
+                  currentNodeId={selectedNode!}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Node Details Dialog (double-click) */}
+        <Dialog open={!!detailsDialogNode} onOpenChange={(open) => { if (!open) setDetailsDialogNode(null) }}>
+          {detailsDialogNode && (() => {
+            const nd = detailsDialogNode.data
+            const schema = getNodeSchema(nd.type)
+            const dataPorts = NODE_DATA_PORTS[nd.type] || []
+            const outputPorts = dataPorts.filter((p) => p.type === 'output')
+            const inputPorts = dataPorts.filter((p) => p.type === 'input')
+            const example = schema?.example
+            return (
+              <div className="p-4 max-h-[70vh] overflow-y-auto">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-sm font-semibold">{nd.label}</span>
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{nd.type}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">{nd.description}</p>
+
+                {/* Ports */}
+                {dataPorts.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {inputPorts.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-medium text-muted-foreground mb-1">Inputs (left handles):</div>
+                        {inputPorts.map((p) => (
+                          <div key={p.id} className="text-[10px] flex items-center gap-2 ml-2">
+                            <span className="size-1.5 rounded-full inline-block bg-cyan-500" />
+                            <span className="font-medium">{p.label}</span>
+                            <span className="text-muted-foreground/50">: {p.dataType}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {outputPorts.length > 0 && (
+                      <div>
+                        <div className="text-[10px] font-medium text-muted-foreground mb-1">Outputs (right handles):</div>
+                        {outputPorts.map((p) => {
+                          const portSchema = schema?.outputs?.find((s) => s.portId === p.id)
+                          const fields = portSchema?.fields?.filter((f) => f.key !== '')
+                          return (
+                            <div key={p.id} className="ml-2 mb-1">
+                              <div className="text-[10px] flex items-center gap-2">
+                                <span className="size-1.5 rounded-full inline-block bg-emerald-500" />
+                                <span className="font-medium">{p.label}</span>
+                                <span className="text-muted-foreground/50">: {p.dataType}</span>
+                              </div>
+                              {fields && fields.length > 0 && (
+                                <div className="ml-4 mt-0.5 grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                  {fields.map((f) => (
+                                    <div key={f.key} className="text-[9px] text-muted-foreground flex items-center gap-1">
+                                      <span>{f.label}</span>
+                                      <span className="text-[8px] text-muted-foreground/40">({f.type})</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
                     )}
                   </div>
-                ))}
-            </div>
-          </div>
-        )}
+                )}
+
+                {/* Default config values */}
+                {(() => {
+                  const fieldDefs = getNodeFields(nd.type)
+                  const configurable = fieldDefs.filter((f) => !f.hideFromPanel)
+                  if (configurable.length === 0) return null
+                  return (
+                    <div className="mb-3">
+                      <div className="text-[10px] font-medium text-muted-foreground mb-1">Fields:</div>
+                      {configurable.map((f) => {
+                        const val = nd[f.key] as string | undefined
+                        return (
+                          <div key={f.key} className="text-[10px] flex items-center gap-2 ml-2">
+                            <span className="font-medium">{f.label}:</span>
+                            <code className="text-[9px] bg-muted px-1 rounded">{val || '(empty)'}</code>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
+
+                {/* Example data */}
+                {example && (
+                  <div>
+                    <div className="text-[10px] font-medium text-muted-foreground mb-1">Example output:</div>
+                    <pre className="text-[9px] bg-muted p-2 rounded overflow-x-auto">{JSON.stringify(example, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </Dialog>
       </div>
     </div>
   )

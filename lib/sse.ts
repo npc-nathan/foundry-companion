@@ -20,6 +20,7 @@ export type SSEEvent =
   | { type: 'chat'; data: unknown }
   | { type: 'scene'; data: unknown }
   | { type: 'hook'; data: unknown }
+  | { type: 'rolls'; data: unknown }
   | { type: 'connected'; data: { clients: number } }
 
 type SSECallback = (event: SSEEvent) => void
@@ -60,7 +61,7 @@ class SSEManager {
     }
 
     // Map convenience source names to actual relay endpoints
-    const endpoint = source === 'encounter' ? 'encounters' : source
+    const endpoint = source === 'encounter' ? 'encounters' : source === 'hook' ? 'hooks' : source
 
     // Build URL with required clientId query param
     const url = `/api/relay/${endpoint}/subscribe?clientId=${encodeURIComponent(clientId)}`
@@ -99,7 +100,7 @@ class SSEManager {
           if (done) break
 
           buffer += decoder.decode(value, { stream: true })
-
+          console.log('[SSE RAW]', decoder.decode(value, { stream: true }))
           // SSE protocol: messages are separated by double newlines
           const messages = buffer.split('\n\n')
           buffer = messages.pop() || ''
@@ -136,11 +137,13 @@ class SSEManager {
   }
 
   private inferType(source: string): SSEEvent['type'] {
-    if (source.includes('encounter')) return 'encounter'
-    if (source.includes('chat')) return 'chat'
-    if (source.includes('scene')) return 'scene'
-    return 'hook'
-  }
+      if (source === 'encounter' || source === 'encounters') return 'encounter'
+      if (source === 'chat') return 'chat'
+      if (source === 'scene') return 'scene'
+      if (source === 'rolls') return 'rolls'
+      // 'hook', 'hooks', or anything else → generic hook type
+      return 'hook'
+    }
 
   /** Add a listener for SSE events. Returns unsubscribe function. */
   listen(callback: SSECallback) {

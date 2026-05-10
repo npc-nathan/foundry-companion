@@ -1,13 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { relay } from '@/lib/relay'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from 'sonner'
 import { Plus, Play, Save, Trash2, Search, Code2, GitBranch, Terminal } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -49,12 +47,11 @@ export default function GMMacrosPage() {
   const [editScope, setEditScope] = useState('global')
   const [editCommand, setEditCommand] = useState('')
   const [isNew, setIsNew] = useState(false)
-  const hasUnsaved = useRef(false)
 
-  const { data, isLoading, error } = useQuery({
+
+    const { data, isLoading, error } = useQuery({
     queryKey: ['macros'],
     queryFn: () => relay.getMacros(),
-    refetchInterval: 30_000,
   })
 
   const rawMacros: unknown[] = data && 'macros' in data
@@ -93,7 +90,6 @@ export default function GMMacrosPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['macros'] })
-      hasUnsaved.current = false
       setIsNew(false)
       toast.success(isNew ? 'Macro created' : 'Macro saved')
     },
@@ -134,7 +130,6 @@ export default function GMMacrosPage() {
     setEditScope(m.scope || 'global')
     setEditCommand(m.command || '')
     setIsNew(false)
-    hasUnsaved.current = false
   }, [])
 
   const newMacro = useCallback(() => {
@@ -144,20 +139,17 @@ export default function GMMacrosPage() {
     setEditScope('global')
     setEditCommand('// New macro\n')
     setIsNew(true)
-    hasUnsaved.current = false
   }, [])
 
   // Sync command when CodeMirror changes
   const onCommandChange = useCallback((val: string) => {
     setEditCommand(val)
-    hasUnsaved.current = true
   }, [])
 
   const onFieldChange = useCallback((field: string, val: string) => {
     if (field === 'name') setEditName(val)
     if (field === 'type') setEditType(val)
     if (field === 'scope') setEditScope(val)
-    hasUnsaved.current = true
   }, [])
 
   // ─── Render ─────────────────────────────────────────────

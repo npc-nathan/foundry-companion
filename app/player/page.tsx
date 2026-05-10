@@ -12,7 +12,6 @@ export default function PlayerDashboard() {
   const { data: structure } = useQuery({
     queryKey: ['structure', 'Scene'],
     queryFn: () => relay.structure('Scene', 'true'),
-    refetchInterval: 30000,
   })
 
   const scenes: Array<{ name: string; active: boolean }> = (structure as any)?.data?.entities?.scenes || []

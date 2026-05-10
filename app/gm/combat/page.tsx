@@ -15,7 +15,6 @@ export default function CombatPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['encounters'],
     queryFn: () => relay.encounters(),
-    refetchInterval: 5000,
   });
 
   const encounters: any[] = (data as any)?.encounters || [];

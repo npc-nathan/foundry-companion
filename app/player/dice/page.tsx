@@ -29,7 +29,6 @@ export default function PlayerDicePage() {
   const { data: rollsData } = useQuery({
     queryKey: ['rolls'],
     queryFn: () => relay.getRolls(5),
-    refetchInterval: 30000,
   });
 
   const recentRolls: any[] = (rollsData as any)?.data || [];

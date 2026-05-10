@@ -36,7 +36,6 @@ export default function PlayerCharacterPage() {
   const { data: structure } = useQuery({
     queryKey: ["structure", "Actor"],
     queryFn: () => relay.structure("Actor"),
-    refetchInterval: 30000,
   })
 
   const actors = extractActors(structure)
