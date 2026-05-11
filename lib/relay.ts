@@ -404,19 +404,30 @@ export const relay = {
     type: string;
     scope: string;
     command: string;
-  }) => apiPost('/macros', params),
+  }) => apiPost('/create', {
+    entityType: 'Macro',
+    data: {
+      name: params.name,
+      type: params.type,
+      scope: params.scope,
+      command: params.command
+    }
+  }),
 
   updateMacro: (uuid: string, data: Record<string, unknown>) =>
-    apiPatch<unknown>('/macros', { data }, { uuid }),
+    apiPut<unknown>('/update', { data }, { uuid }),
 
   deleteMacro: (uuid: string) =>
-    fetch(`${getUrl('/macros')}?uuid=${uuid}`, {
+    fetch(`${getUrl('/delete')}?uuid=${uuid}`, {
       method: 'DELETE',
       headers: RELAY_HEADERS(),
-    }).then((r) => r.text()),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`)
+      return r.text()
+    }),
 
   executeMacro: (uuid: string) =>
-    apiPost('/macros/evaluate', { uuid }),
+    apiPost('/macro/' + uuid + '/execute'),
 
   // ─── Scenes ───────────────────────────────────────────────
 

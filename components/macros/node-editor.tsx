@@ -525,6 +525,15 @@ interface Props {
   macroName: string
   macroType: string
   macroScope: string
+  isNew?: boolean
+  currentMacroId?: string | null
+  onMacroFieldChange?: (field: string, value: string) => void
+  onSave?: () => void
+  onRun?: () => void
+  onDelete?: () => void
+  isSaving?: boolean
+  isRunning?: boolean
+  isDeleting?: boolean
 }
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -651,7 +660,7 @@ const NODE_DATA_PORTS: Record<string, DataPortDef[]> = {
 
 // ─── Canvas Component ───────────────────────────────────────
 
-function FlowCanvas({ onCodeGenerated, macroName }: { onCodeGenerated: (code: string) => void; macroName: string }) {
+function FlowCanvas({ onCodeGenerated, macroName, isNew, currentMacroId, onMacroFieldChange, onSave, onRun, onDelete, isSaving, isRunning, isDeleting }: Props) {
   const reactFlowInstance = useReactFlow<Node<CustomNodeData>>()
   const [nodes, setNodes, onNodesChange] = useNodesState<MacroNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<MacroEdge>([])
