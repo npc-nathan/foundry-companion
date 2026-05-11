@@ -1,6 +1,5 @@
 'use client'
-
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   useNodesState,
@@ -534,6 +533,9 @@ interface Props {
   isSaving?: boolean
   isRunning?: boolean
   isDeleting?: boolean
+  initialNodes?: unknown[] | null
+  initialEdges?: unknown[] | null
+  onNodeGraphChange?: (nodes: unknown[], edges: unknown[]) => void
 }
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -660,10 +662,22 @@ const NODE_DATA_PORTS: Record<string, DataPortDef[]> = {
 
 // ─── Canvas Component ───────────────────────────────────────
 
-function FlowCanvas({ onCodeGenerated, macroName, isNew, currentMacroId, onMacroFieldChange, onSave, onRun, onDelete, isSaving, isRunning, isDeleting }: Props) {
+function FlowCanvas({ currentCode, onCodeGenerated, macroName, isNew, currentMacroId, onMacroFieldChange, onSave, onRun, onDelete, isSaving, isRunning, isDeleting, initialNodes, initialEdges, onNodeGraphChange }: Props) {
   const reactFlowInstance = useReactFlow<Node<CustomNodeData>>()
   const [nodes, setNodes, onNodesChange] = useNodesState<MacroNode>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<MacroEdge>([])
+  // Load initial node graph from props (only on mount, not on every render)
+  const loadedRef = useRef(false)
+  useEffect(() => {
+    if (initialNodes && initialEdges && initialNodes.length > 0 && !loadedRef.current) {
+      setNodes(initialNodes as MacroNode[])
+      setEdges(initialEdges as MacroEdge[])
+      loadedRef.current = true
+    }
+    if (!initialNodes || !initialEdges || initialNodes.length === 0) {
+      loadedRef.current = false
+    }
+  }, [initialNodes, initialEdges, setNodes, setEdges])
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [remoteMacros, setRemoteMacros] = useState<RemoteMacro[]>([])
   const [installedModules, setInstalledModules] = useState<InstalledModule[]>([])
@@ -1449,13 +1463,35 @@ function FlowCanvas({ onCodeGenerated, macroName, isNew, currentMacroId, onMacro
 
     lines.push('}')
     lines.push('executeMacro()')
-    onCodeGenerated(lines.join('\n'))
+    const code = lines.join('\n')
+    onCodeGenerated(code)
+    // Also store the full command with node graph embedded
+    const fullCommand = nodes.length > 0
+      ? `// __NODE_GRAPH_V2__\n// ${JSON.stringify({ nodes, edges })}\n// __END_NODE_GRAPH__\n${code}`
+      : code
+    ;(window as any).__nodeEditor_fullCommand = fullCommand
     toast.success('Code generated from node graph')
+    return fullCommand
   }, [nodes, edges, macroName, onCodeGenerated])
+
   const selectedNodeData = selectedNode
     ? nodes.find((n) => n.id === selectedNode)?.data ?? null
     : null
-
+  // Expose exportCode so parent can call it before save
+  useEffect(() => {
+    ;(window as any).__nodeEditor_export = exportCode
+    return () => { delete (window as any).__nodeEditor_export }
+  }, [exportCode])
+  
+  // Notify parent of node graph changes
+  const prevNodeCount = useRef(0)
+  useEffect(() => {
+    if (onNodeGraphChange && nodes.length !== prevNodeCount.current) {
+      prevNodeCount.current = nodes.length
+      onNodeGraphChange(nodes, edges)
+    }
+  }, [nodes, edges, onNodeGraphChange])
+  
   // ─── Field labels for properties panel ───────────────────
   const fieldLabels: Record<string, string> = {
     formula: 'Formula',

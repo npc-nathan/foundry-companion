@@ -47,6 +47,7 @@ export default function GMMacrosPage() {
   const [editScope, setEditScope] = useState('global')
   const [editCommand, setEditCommand] = useState('')
   const [isNew, setIsNew] = useState(false)
+  const [nodeGraph, setNodeGraph] = useState<{ nodes: unknown[]; edges: unknown[] } | null>(null)
 
 
     const { data, isLoading, error } = useQuery({
@@ -82,15 +83,33 @@ export default function GMMacrosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      // Get latest exported code from node editor
+      let code = editCommand
+      const exportFn = (window as any).__nodeEditor_export
+      if (typeof exportFn === 'function') {
+        const exported = exportFn()
+        if (exported) code = exported
+      }
+      const command = code
       if (isNew) {
-        return relay.createMacro({ name: editName, type: editType, scope: editScope, command: editCommand })
+        return relay.createMacro({ name: editName, type: editType, scope: editScope, command })
       }
       if (!selectedId) return
-      return relay.updateMacro(selectedId, { name: editName, type: editType, scope: editScope, command: editCommand })
+      return relay.updateMacro(selectedId, { name: editName, type: editType, scope: editScope, command })
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['macros'] })
-      setIsNew(false)
+      // After creating, set the returned UUID as selected
+      if (isNew && data) {
+        const result = data as any
+        const newId = result.uuid || result._id || result.id || ''
+        if (newId) {
+          setSelectedId(newId)
+          setIsNew(false)
+        }
+      } else {
+        setIsNew(false)
+      }
       toast.success(isNew ? 'Macro created' : 'Macro saved')
     },
     onError: () => toast.error('Failed to save macro'),
@@ -128,7 +147,9 @@ export default function GMMacrosPage() {
     setEditName(m.name)
     setEditType(m.type || 'script')
     setEditScope(m.scope || 'global')
-    setEditCommand(m.command || '')
+    const { code, nodeGraph } = decodeCommand(m.command || '')
+    setEditCommand(code)
+    setNodeGraph(nodeGraph)
     setIsNew(false)
   }, [])
 
@@ -138,6 +159,7 @@ export default function GMMacrosPage() {
     setEditType('script')
     setEditScope('global')
     setEditCommand('// New macro\n')
+    setNodeGraph(null)
     setIsNew(true)
   }, [])
 
@@ -151,6 +173,26 @@ export default function GMMacrosPage() {
     if (field === 'type') setEditType(val)
     if (field === 'scope') setEditScope(val)
   }, [])
+
+  const onNodeGraphChange = useCallback((nodes: unknown[], edges: unknown[]) => {
+    setNodeGraph({ nodes, edges })
+  }, [])
+
+  // ─── Node graph helpers ─────────────────────────────────
+  function encodeCommand(code: string, nodes: unknown[], edges: unknown[]): string {
+    if (nodes.length === 0) return code
+    return `// __NODE_GRAPH_V2__\n// ${JSON.stringify({ nodes, edges })}\n// __END_NODE_GRAPH__\n${code}`
+  }
+
+  function decodeCommand(command: string): { code: string; nodeGraph: { nodes: unknown[]; edges: unknown[] } | null } {
+    const match = command.match(/\/\/ __NODE_GRAPH_V2__\n\/\/ (.*)\n\/\/ __END_NODE_GRAPH__\n?([\s\S]*)?/)
+    if (!match) return { code: command, nodeGraph: null }
+    try {
+      return { code: (match[2] || '').trim(), nodeGraph: JSON.parse(match[1]) }
+    } catch {
+      return { code: command, nodeGraph: null }
+    }
+  }
 
   // ─── Render ─────────────────────────────────────────────
 
@@ -395,6 +437,9 @@ export default function GMMacrosPage() {
             macroName={editName}
             macroType={editType}
             macroScope={editScope}
+            initialNodes={nodeGraph?.nodes ?? null}
+            initialEdges={nodeGraph?.edges ?? null}
+            onNodeGraphChange={onNodeGraphChange}
           />
         </div>
       </div>

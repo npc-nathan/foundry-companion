@@ -1,7 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from 'next-themes'
@@ -62,8 +62,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // Reconnect SSE on app reload when already connected
   const { status, config } = useStore()
+  const sseConnected = useRef(false)
   useEffect(() => {
-    if (status.connected && config.relayUrl && config.apiKey) {
+    if (status.connected && config.relayUrl && config.apiKey && !sseConnected.current) {
+      sseConnected.current = true
       sseManager.subscribe('encounter', config.relayUrl, config.apiKey, config.clientId)
       sseManager.subscribe('chat', config.relayUrl, config.apiKey, config.clientId)
       sseManager.subscribe('scene', config.relayUrl, config.apiKey, config.clientId)
