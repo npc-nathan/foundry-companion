@@ -549,7 +549,13 @@ export function ExpressionEditor({
                           onClick={() =>
                             setExpandedNodes((p) => ({ ...p, [content.nodeId]: !p[content.nodeId] }))
                           }
-                          className="flex items-center gap-1 w-full text-left text-xs font-medium text-cyan-300 hover:text-cyan-200 py-1 px-1 rounded hover:bg-cyan-900/20 transition-colors"
+                          className={cn(
+                            "flex items-center gap-1 w-full text-left text-xs font-medium py-1 px-1 rounded transition-colors",
+                            content.isConnected
+                              ? "text-cyan-300 hover:text-cyan-200 hover:bg-cyan-900/20"
+                              : "text-muted-foreground/40 cursor-not-allowed"
+                          )}
+                          title={content.isConnected ? "" : "Not connected — add a data edge from this node"}
                         >
                           {expandedNodes[content.nodeId] ? (
                             <ChevronDown className="h-3 w-3 shrink-0" />
@@ -607,10 +613,11 @@ export function ExpressionEditor({
                                       .map((field) => (
                                         <button
                                           key={field.key}
+                                          disabled={!content.isConnected}
                                           onClick={() => {
-                                            if (mode === 'advanced') {
+                                            if (content.isConnected && mode === 'advanced') {
                                               insertExpressionField(content, port, field)
-                                            } else {
+                                            } else if (content.isConnected) {
                                               const target = getDefaultTarget()
                                               if (target.rowId) {
                                                 insertField(target, content, port, field)
@@ -618,7 +625,12 @@ export function ExpressionEditor({
                                               }
                                             }
                                           }}
-                                          className="flex items-center gap-1 w-full text-left text-[11px] text-muted-foreground hover:text-cyan-300 py-0.5 px-1.5 rounded hover:bg-cyan-900/20 transition-colors group"
+                                          className={cn(
+                                            "flex items-center gap-1 w-full text-left text-[11px] py-0.5 px-1.5 rounded transition-colors",
+                                            content.isConnected
+                                              ? "text-muted-foreground hover:text-cyan-300 hover:bg-cyan-900/20"
+                                              : "text-muted-foreground/30 cursor-not-allowed"
+                                          )}
                                         >
                                           {field.type === 'number' && <Hash className="h-2.5 w-2.5 text-blue-400 shrink-0" />}
                                           {field.type === 'string' && <Type className="h-2.5 w-2.5 text-yellow-400 shrink-0" />}
@@ -637,7 +649,9 @@ export function ExpressionEditor({
                                 {port.fields.length === 1 && port.fields[0].key === '' && (
                                   <div className="ml-4">
                                     <button
+                                      disabled={!content.isConnected}
                                       onClick={() => {
+                                        if (!content.isConnected) return
                                         if (mode === 'advanced') {
                                           insertExpressionField(content, port, undefined)
                                         } else {
@@ -645,12 +659,15 @@ export function ExpressionEditor({
                                           if (target.rowId) {
                                             insertField(target, content, port, undefined)
                                             setActiveInsertTarget(target)
-                                          } else {
-                                            insertExpressionField(content, port, undefined)
                                           }
                                         }
                                       }}
-                                      className="flex items-center gap-1 w-full text-left text-[11px] text-cyan-200/70 hover:text-cyan-200 py-0.5 px-1.5 rounded hover:bg-cyan-900/20 transition-colors"
+                                      className={cn(
+                                        "flex items-center gap-1 w-full text-left text-[11px] py-0.5 px-1.5 rounded transition-colors",
+                                        content.isConnected
+                                          ? "text-cyan-200/70 hover:text-cyan-200 hover:bg-cyan-900/20"
+                                          : "text-muted-foreground/30 cursor-not-allowed"
+                                      )}
                                     >
                                       <span
                                         className={cn(

@@ -485,11 +485,6 @@ const sceneDim = useMemo(() => {
     [activeTool, viewport, sceneDim, onTargetToken]
   )
 
-  const handleCanvasClick = useCallback(() => {
-    if (activeTool === 'select') {
-      setSelectedToken(null)
-    }
-  }, [activeTool])
 
   // ─── Canvas coordinate transform ────────────────────────
   const sceneToScreen = useCallback(
@@ -539,34 +534,35 @@ const sceneDim = useMemo(() => {
     [viewport, sceneDim]
   )
 
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+      if (activeTool === 'select') {
+        setSelectedToken(null)
+      }
+      if (activeTool === 'measure') {
+        const pos = screenToScene(e.clientX, e.clientY)
+        setMeasurePoints((prev) => {
+          if (prev.length >= 2) return [{ x: pos.x, y: pos.y }]
+          return [...prev, { x: pos.x, y: pos.y }]
+        })
+        // Clear previous result when starting new measurement
+        if (measurePoints.length >= 2) {
+          setMeasureResult(null)
+        }
+      }
+    }, [activeTool, screenToScene, measurePoints.length])
+
   // ─── Measure distance ───────────────────────────────────
   useEffect(() => {
     if (measurePoints.length === 2) {
       const [p1, p2] = measurePoints
-      relay
-        .measureDistance({
-          originX: Math.round(p1.x),
-          originY: Math.round(p1.y),
-          targetX: Math.round(p2.x),
-          targetY: Math.round(p2.y),
-        })
-        .then((result) => {
-          const r = result as { data?: MeasurementResult }
-          if (r.data) {
-            setMeasureResult(r.data)
-            onMeasureDistance?.(r.data)
-          }
-        })
-        .catch(() => {
-          // Fallback: rough grid-based estimate
-          const dx = (p2.x - p1.x) / gridSize
-          const dy = (p2.y - p1.y) / gridSize
-          const gridSpaces = Math.sqrt(dx * dx + dy * dy)
-          const dist = gridSpaces * gridDistance
-          setMeasureResult({ distance: dist, gridSpaces: Math.round(gridSpaces), units: gridUnits })
-        })
+      // Use grid-based calculation directly (relay API endpoint doesn't exist)
+      const dx = (p2.x - p1.x) / gridSize
+      const dy = (p2.y - p1.y) / gridSize
+      const gridSpaces = Math.sqrt(dx * dx + dy * dy)
+      const dist = gridSpaces * gridDistance
+      setMeasureResult({ distance: dist, gridSpaces: Math.round(gridSpaces), units: gridUnits })
     }
-  }, [measurePoints, gridSize, gridDistance, gridUnits, onMeasureDistance])
+  }, [measurePoints, gridSize, gridDistance, gridUnits])
 
   // ─── Tooltip for measure result ─────────────────────────
   const showMeasureResult = measurePoints.length === 2 && measureResult
@@ -742,14 +738,28 @@ const sceneDim = useMemo(() => {
                 clipPath={`url(#img-clip-${token._id})`}
               />
             ) : (
-              <circle
-                cx={screenPos.left}
-                cy={screenPos.top}
-                r={Math.min(tokenWidth, tokenHeight) / 2}
-                fill={DISPOSITION_COLORS[token.disposition] || '#888'}
-                stroke={token.hidden ? '#666' : '#fff'}
-                strokeWidth={1.5 / viewport.scale}
-              />
+              <g>
+                <circle
+                  cx={screenPos.left}
+                  cy={screenPos.top}
+                  r={Math.min(tokenWidth, tokenHeight) / 2}
+                  fill={DISPOSITION_COLORS[token.disposition] || '#888'}
+                  stroke={token.hidden ? '#666' : '#fff'}
+                  strokeWidth={1.5 / viewport.scale}
+                />
+                <text
+                  x={screenPos.left}
+                  y={screenPos.top}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#fff"
+                  fontSize={`${Math.min(tokenWidth, tokenHeight) * 0.4}px`}
+                  fontWeight="bold"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {(token.name || '?')[0].toUpperCase()}
+                </text>
+              </g>
             )}
 
             {/* Disposition border ring */}

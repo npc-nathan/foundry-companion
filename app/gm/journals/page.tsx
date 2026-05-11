@@ -203,22 +203,6 @@ export default function JournalsPage() {
   const deletedPageIdsRef = useRef<string[]>([]);
   useEffect(() => { deletedPageIdsRef.current = deletedPageIds; }, [deletedPageIds]);
 
-  // Refs to keep saveMutation closure reading fresh values
-  const editNameRef = useRef('');
-  useEffect(() => { editNameRef.current = editName; }, [editName]);
-
-  const editPageNameRef = useRef('');
-  useEffect(() => { editPageNameRef.current = editPageName; }, [editPageName]);
-
-  const editPageContentRef = useRef('');
-  useEffect(() => { editPageContentRef.current = editPageContent; }, [editPageContent]);
-
-  const editPageIndexRef = useRef(0);
-  useEffect(() => { editPageIndexRef.current = editPageIndex; }, [editPageIndex]);
-
-  const newPagesRef = useRef<{ name: string; content: string; type: string }[]>([]);
-  useEffect(() => { newPagesRef.current = newPages; }, [newPages]);
-
   // ─── Queries ──────────────────────────────────────────────
 
   const { data: listData, isLoading } = useQuery({
@@ -261,43 +245,53 @@ export default function JournalsPage() {
         const journal = journalData?.data;
         if (!journal) throw new Error('Journal data not loaded');
 
-        const updatedPages = [...journal.pages];
         const deletedIds = [...deletedPageIdsRef.current];
 
-        // Flush current page edits into dirtyPages first
-        if (editPageIndexRef.current < journal.pages.length) {
-          dirtyPagesRef.current.set(editPageIndexRef.current, {
-            name: editPageNameRef.current,
-            content: editPageContentRef.current,
+        // Capture current page's edit if editing an existing page
+        if (editPageIndex < journal.pages.length) {
+          dirtyPagesRef.current.set(editPageIndex, {
+            name: editPageName,
+            content: editPageContent,
           });
         }
 
-        // Apply all dirty page edits
-        for (const [idx, edit] of dirtyPagesRef.current.entries()) {
-          if (idx < updatedPages.length) {
-            updatedPages[idx] = {
-              ...updatedPages[idx],
-              name: edit.name,
-              text: {
-                content: edit.content,
-                format: updatedPages[idx]?.text?.format ?? 1,
-              },
-            };
-          }
-        }
-
         // Capture current page if editing a pending new page
-        const pendingPageIndex = editPageIndexRef.current - journal.pages.length;
-        const pendingNewPages = [...newPagesRef.current];
+        const pendingPageIndex = editPageIndex - journal.pages.length;
+        const pendingNewPages = [...newPages];
         if (pendingPageIndex >= 0 && pendingPageIndex < pendingNewPages.length) {
           pendingNewPages[pendingPageIndex] = {
             ...pendingNewPages[pendingPageIndex],
-            name: editPageNameRef.current,
-            content: editPageContentRef.current,
+            name: editPageName,
+            content: editPageContent,
           };
         }
 
-        // Step 1: Delete marked pages via execute-js (Foundry v13 requires deleteEmbeddedDocuments)
+        // Build final pages list: filter deleted, then apply dirty edits by renderable index
+        const existingPages = journal.pages.filter((p) => !deletedIds.includes(p._id));
+        const finalExisting = existingPages.map((page, idx) => {
+          const dirty = dirtyPagesRef.current.get(idx);
+          if (dirty) {
+            return {
+              ...page,
+              name: dirty.name,
+              text: { content: dirty.content, format: page.text?.format ?? 1 },
+            };
+          }
+          return page;
+        });
+
+        // Append new pages
+        const finalPages: Record<string, unknown>[] = [
+          ...finalExisting,
+          ...pendingNewPages.map((np) => ({
+            name: np.name,
+            type: np.type || 'text',
+            text: { content: np.content, format: 1 },
+            sort: finalExisting.length,
+          })),
+        ];
+
+        // Delete marked pages via execute-js (Foundry requires this)
         const extractedUuid = selectedId.replace('JournalEntry.', '');
         for (const pageId of deletedIds) {
           const result = await relay.executeJs(
@@ -305,38 +299,13 @@ export default function JournalsPage() {
           );
           const resultData = result as { success?: boolean; error?: string };
           if (resultData.success === false) {
-            console.error('[PAGE_DELETE_ERR] Failed to delete page', pageId, resultData.error);
             throw new Error(`Failed to delete page: ${resultData.error}`);
           }
         }
 
-        // Step 2: Build final pages array (omitting deleted pages)
-        const finalPages: Record<string, unknown>[] = [];
-
-        for (const page of updatedPages) {
-          if (deletedIds.includes(page._id)) {
-            // Skipped — already deleted via execute-js above
-            continue;
-          }
-          finalPages.push({
-            ...page,
-            text: page.text ? { ...page.text } : undefined,
-          });
-        }
-
-        // Step 3: Append new pages (no _id → Foundry creates them)
-        for (const np of pendingNewPages) {
-          finalPages.push({
-            name: np.name,
-            type: np.type || 'text',
-            text: { content: np.content, format: 1 },
-            sort: finalPages.length,
-          });
-        }
-
-        // Step 4: Update the journal with remaining + new pages
+        // Update the journal
         return relay.updateJournal(selectedId, {
-          name: editNameRef.current,
+          name: editName,
           pages: finalPages,
         });
       },

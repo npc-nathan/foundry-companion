@@ -105,7 +105,7 @@ const ABILITY_NAMES: Record<string, string> = {
 const SKILL_LABELS: Record<string, string> = {
   acr: 'Acrobatics', ani: 'Animal Handling', arc: 'Arcana', ath: 'Athletics',
   dec: 'Deception', his: 'History', ins: 'Insight', int: 'Intimidation',
-  inv: 'Investigation', med: 'Medicine', nat: 'Nature', per: 'Perception',
+  inv: 'Investigation', med: 'Medicine', nat: 'Nature', 
   prc: 'Perception', prf: 'Performance', rel: 'Religion', slt: 'Sleight of Hand',
   ste: 'Stealth', sur: 'Survival',
 }

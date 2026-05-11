@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from 'next-themes'
 import { sseManager } from '@/lib/sse'
 import { useStore } from '@/lib/store'
+import { toast } from 'sonner'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -51,6 +52,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           qc.invalidateQueries({ queryKey: ['encounters'] })
           qc.invalidateQueries({ queryKey: ['canvas'] })
           break
+        case 'connected':
+          toast.success('SSE reconnected')
+          break
       }
     })
     return () => { unsub() }
@@ -74,7 +78,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          forcedTheme="dark"
           disableTransitionOnChange
         >
           {children}

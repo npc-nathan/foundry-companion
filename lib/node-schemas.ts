@@ -312,6 +312,7 @@ export interface DynamicContentNode {
   nodeId: string
   nodeType: string
   nodeLabel: string
+  isConnected: boolean
   ports: DynamicContentPort[]
 }
 
@@ -331,17 +332,19 @@ export function buildDynamicContentTree(
   edges: Array<{ source: string; target: string; sourceHandle?: string | null }>,
   currentNodeId: string
 ): DynamicContentNode[] {
-  // Find all nodes that connect TO the current node via data edges
-  const connectedSourceIds = new Set<string>()
-  for (const edge of edges) {
-    if (edge.target === currentNodeId) {
-      connectedSourceIds.add(edge.source)
+  // Find all upstream nodes via transitive closure of edges
+  const upstreamNodes = new Set<string>()
+  function findUpstream(nodeId: string) {
+    for (const edge of edges) {
+      if (edge.target === nodeId) {
+        if (!upstreamNodes.has(edge.source)) {
+          upstreamNodes.add(edge.source)
+          findUpstream(edge.source)
+        }
+      }
     }
   }
-
-  // Also include data-producing nodes that are in the graph (via exec chain)
-  // so users can reference data from any upstream node, not just directly connected ones
-  const dataProducers = ['rollDice', 'variable', 'searchActors', 'searchTargets', 'searchScenes', 'getActorHP', 'rollTable', 'condition']
+  findUpstream(currentNodeId)
 
   const result: DynamicContentNode[] = []
 
@@ -352,16 +355,18 @@ export function buildDynamicContentTree(
 
     // Only include data-producing nodes (ones with output ports)
     const outputPorts = schema.outputs.filter((p) => {
-      // Check if this port actually has output fields
       return p.fields.length > 0
     })
 
     if (outputPorts.length === 0) continue
 
+    const isConnected = upstreamNodes.has(node.id)
+
     result.push({
       nodeId: node.id,
       nodeType: node.data.type,
       nodeLabel: node.data.label,
+      isConnected,
       ports: outputPorts.map((p) => ({
         portId: p.portId,
         portLabel: p.portLabel,

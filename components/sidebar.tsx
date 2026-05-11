@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { useTheme } from "next-themes"
 import {
   LayoutDashboard,
   Map,
@@ -15,6 +16,8 @@ import {
   Code2,
   BookOpen,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { sseManager } from "@/lib/sse"
 
@@ -36,6 +39,19 @@ const playerNavItems = [
   { label: "Chat", href: "/player/chat", icon: MessageSquare },
   { label: "Dice", href: "/player/dice", icon: Dice5 },
 ]
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme()
+  return (
+    <button
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground transition-colors"
+    >
+      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {theme === "dark" ? "Light Mode" : "Dark Mode"}
+    </button>
+  )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -79,10 +95,11 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      <div className="border-t p-4">
+      <div className="border-t p-4 space-y-1">
         <div className="mb-3 text-xs text-muted-foreground truncate">
           {config.clientName}
         </div>
+        <ThemeToggle />
         <button
           onClick={handleDisconnect}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
