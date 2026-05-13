@@ -7,6 +7,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from 'next-themes'
 import { sseManager } from '@/lib/sse'
 import { useStore } from '@/lib/store'
+import { endHeadlessSession } from '@/lib/session'
 import { toast } from 'sonner'
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -73,6 +74,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
       sseManager.subscribe('hook', config.relayUrl, config.apiKey, config.clientId)
     }
   }, [status.connected, config.relayUrl, config.apiKey, config.clientId])
+
+  // End headless session on app unmount
+  useEffect(() => {
+    return () => {
+      const { config } = useStore.getState()
+      if (config.sessionId && config.apiKey) {
+        endHeadlessSession(config.apiKey, config.sessionId).catch(() => {})
+      }
+    }
+  }, [])
 
   return (
     <QueryClientProvider client={queryClient}>

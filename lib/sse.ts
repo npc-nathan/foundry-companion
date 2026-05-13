@@ -90,11 +90,9 @@ class SSEManager {
         // Reset retry on successful connection
         this.retryCounters.set(source, 0)
         this.dispatch({ type: 'connected', data: { clients: 0 } })
-
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
-
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
@@ -119,6 +117,9 @@ class SSEManager {
             }
           }
         }
+
+        // Stream ended normally — reconnect via backoff
+        throw new Error('SSE stream closed')
       } catch (err: unknown) {
         // Ignore abort errors (intentional disconnect)
         if (err instanceof Error && err.name === 'AbortError') return

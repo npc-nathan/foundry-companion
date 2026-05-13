@@ -43,6 +43,13 @@ async function handleRequest(
   if (apiKey) headers.set('x-api-key', apiKey)
   if (clientId) headers.set('x-client-id', clientId)
 
+  // Forward custom headers for session endpoints
+  const customHeaders = ['x-foundry-url', 'x-username', 'x-world-name']
+  for (const h of customHeaders) {
+    const val = req.headers.get(h)
+    if (val) headers.set(h, val)
+  }
+
   try {
     const res = await fetch(relayUrl.toString(), {
       method: req.method,
@@ -68,7 +75,30 @@ async function handleRequest(
     // SSE: stream the response instead of buffering it
     if (contentType.includes('text/event-stream')) {
       const { readable, writable } = new TransformStream()
-      res.body?.pipeTo(writable)
+      const writer = writable.getWriter()
+
+      // Manually pump relay response body to the response stream
+      // This ensures clean close propagation when relay disconnects
+      if (res.body) {
+        const reader = res.body.getReader()
+        const pump = async () => {
+          try {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) {
+                await writer.close()
+                break
+              }
+              await writer.write(value)
+            }
+          } catch {
+            // Relay connection closed — close the writer so client gets clean EOF
+            await writer.close().catch(() => {})
+          }
+        }
+        pump()
+      }
+
       return new NextResponse(readable, {
         status: res.status,
         headers: {

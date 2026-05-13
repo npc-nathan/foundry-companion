@@ -7,6 +7,7 @@ interface Config {
   clientId: string
   clientName: string
   role: "gm" | "player"
+  sessionId?: string
 }
 
 interface UIConfig {
