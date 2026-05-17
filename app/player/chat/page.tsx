@@ -69,7 +69,10 @@ export default function PlayerChatPage() {
     queryFn: () => relay.getChatMessages(50),
   });
 
-  const messages: ChatMessage[] = [...((rawMessages as any)?.data?.messages || [])].reverse();
+  const messages: ChatMessage[] = [
+    ...(((rawMessages as { data?: { messages?: unknown[] } })?.data?.messages as ChatMessage[]) ||
+      []),
+  ].reverse();
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -145,9 +148,7 @@ export default function PlayerChatPage() {
                         {msg.flavor}
                       </span>
                     )}
-                    <span className="text-sm whitespace-pre-wrap break-words">
-                      {msg.content}
-                    </span>
+                    <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
                   </div>
                   {msg.timestamp && (
                     <span className="text-[10px] text-muted-foreground shrink-0">

@@ -39,6 +39,13 @@ interface ChatMessage {
   flavor?: string;
 }
 
+interface FoundryUser {
+  id: string;
+  name: string;
+  isGM: boolean;
+  active: boolean;
+}
+
 function getSpeakerLabel(msg: ChatMessage): string | null {
   const s = msg.speaker;
   if (!s) {
@@ -88,10 +95,11 @@ export default function GMChatPage() {
     queryFn: () => relay.getUsers(),
   });
 
-  const messages: ChatMessage[] = [...((rawMessages as any)?.data?.messages || [])].reverse();
+  const msgData = rawMessages as { data?: { messages?: ChatMessage[] } } | undefined;
+  const messages: ChatMessage[] = [...(msgData?.data?.messages || [])].reverse();
 
-  const foundryUsers: Array<{ id: string; name: string; isGM: boolean; active: boolean }> =
-    ((rawUsers as any)?.data || []) as any;
+  const userData = rawUsers as { data?: FoundryUser[] } | undefined;
+  const foundryUsers: FoundryUser[] = userData?.data || [];
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -102,8 +110,13 @@ export default function GMChatPage() {
   }, [messages, scrollToBottom]);
 
   const sendMutation = useMutation({
-    mutationFn: (params: { content: string; whisper?: string; speaker?: string; chatType?: number; alias?: string }) =>
-      relay.chat(params.content, params.whisper, params.speaker, params.chatType, params.alias),
+    mutationFn: (params: {
+      content: string;
+      whisper?: string;
+      speaker?: string;
+      chatType?: number;
+      alias?: string;
+    }) => relay.chat(params.content, params.whisper, params.speaker, params.chatType, params.alias),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
       setMessage('');
@@ -131,6 +144,20 @@ export default function GMChatPage() {
     }
   };
 
+  function getWhisperLabel(whisperVal: unknown): string {
+    if (Array.isArray(whisperVal) && whisperVal.length > 0) {
+      const id = String(whisperVal[0]);
+      const user = foundryUsers.find((u) => u.id === id);
+      return user?.name || id;
+    }
+    if (typeof whisperVal === 'string') return whisperVal;
+    if (whisperVal && typeof whisperVal === 'object' && !Array.isArray(whisperVal)) {
+      const w = whisperVal as Record<string, unknown>;
+      return String(w?.user || w?.name || '');
+    }
+    return '';
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)]">
       <div className="flex items-center justify-between mb-4">
@@ -157,10 +184,7 @@ export default function GMChatPage() {
           ) : (
             <div className="h-full overflow-y-auto p-4 space-y-2">
               {messages.map((msg, i) => (
-                <div
-                  key={msg.id || i}
-                  className="flex items-start gap-3 text-sm"
-                >
+                <div key={msg.id || i} className="flex items-start gap-3 text-sm">
                   <Badge
                     variant="outline"
                     className={`shrink-0 text-[10px] px-1.5 py-0 ${getChatTypeColor(msg.type)}`}
@@ -181,25 +205,11 @@ export default function GMChatPage() {
                         {msg.flavor}
                       </span>
                     )}
-                    <span className="text-sm whitespace-pre-wrap break-words">
-                      {msg.content}
-                    </span>
+                    <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
                     {(() => {
-                      const whisperVal = msg.whisper;
-                      let whisperStr = '';
-                      if (Array.isArray(whisperVal) && whisperVal.length > 0) {
-                        const id = String(whisperVal[0]);
-                        const user = foundryUsers.find((u) => u.id === id);
-                        whisperStr = user?.name || id;
-                      } else if (typeof whisperVal === 'string') {
-                        whisperStr = whisperVal;
-                      } else if (whisperVal && typeof whisperVal === 'object' && !Array.isArray(whisperVal)) {
-                        whisperStr = (whisperVal as any)?.user || (whisperVal as any)?.name || '';
-                      }
+                      const whisperStr = getWhisperLabel(msg.whisper);
                       return whisperStr ? (
-                        <span className="text-[10px] text-yellow-500 ml-1">
-                          (to: {whisperStr})
-                        </span>
+                        <span className="text-[10px] text-yellow-500 ml-1">(to: {whisperStr})</span>
                       ) : null;
                     })()}
                   </div>
@@ -285,8 +295,8 @@ export default function GMChatPage() {
                 mode === 'ic'
                   ? 'Speak in character...'
                   : mode === 'ooc'
-                  ? 'Say something out of character...'
-                  : `Whisper to ${whisperTarget || 'a player'}...`
+                    ? 'Say something out of character...'
+                    : `Whisper to ${whisperTarget || 'a player'}...`
               }
               className="flex-1"
             />

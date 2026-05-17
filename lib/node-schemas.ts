@@ -5,28 +5,28 @@
 // The 'dataType' field maps to handle colors in node-editor.tsx:
 //   any=cyan, number=blue, string=yellow, actor=emerald, token=rose, scene=teal, boolean=purple
 
-export type FieldType = 'string' | 'number' | 'boolean' | 'actor' | 'token' | 'scene' | 'object'
+export type FieldType = 'string' | 'number' | 'boolean' | 'actor' | 'token' | 'scene' | 'object';
 
 export interface SchemaField {
-  key: string                        // Dot-notation path to the field value
-  label: string                      // Human-readable label shown in the picker
-  type: FieldType                    // Semantic type for type-aware operator filtering
-  path?: string                      // Override access path (defaults to key)
+  key: string; // Dot-notation path to the field value
+  label: string; // Human-readable label shown in the picker
+  type: FieldType; // Semantic type for type-aware operator filtering
+  path?: string; // Override access path (defaults to key)
 }
 
 export interface DataPortSchema {
-  portId: string                     // e.g. 'actor', 'hp', 'result'
-  portLabel: string                  // e.g. 'Actor', 'HP', 'Result'
-  portType: FieldType                // Base type of the port (for top-level color)
-  fields: SchemaField[]              // Sub-fields available on this port's value
+  portId: string; // e.g. 'actor', 'hp', 'result'
+  portLabel: string; // e.g. 'Actor', 'HP', 'Result'
+  portType: FieldType; // Base type of the port (for top-level color)
+  fields: SchemaField[]; // Sub-fields available on this port's value
 }
 
 export interface NodeSchema {
-  type: string
-  label: string
-  description: string
-  outputs: DataPortSchema[]
-  example?: Record<string, unknown>  // Example output values for previews
+  type: string;
+  label: string;
+  description: string;
+  outputs: DataPortSchema[];
+  example?: Record<string, unknown>; // Example output values for previews
 }
 
 // ─── Actor sub-schema ─────────────────────────────────
@@ -69,7 +69,7 @@ const ACTOR_FIELDS: SchemaField[] = [
   { key: 'system.attributes.bonuses.rwak.damage', label: 'Ranged Damage Bonus', type: 'number' },
   { key: 'system.attributes.bonuses.spell.attack', label: 'Spell Attack Bonus', type: 'number' },
   { key: 'system.attributes.bonuses.spell.dc', label: 'Spell Save DC Bonus', type: 'number' },
-]
+];
 
 // ─── Token sub-schema ─────────────────────────────────
 const TOKEN_FIELDS: SchemaField[] = [
@@ -84,7 +84,7 @@ const TOKEN_FIELDS: SchemaField[] = [
   { key: 'locked', label: 'Locked', type: 'boolean' },
   { key: 'hidden', label: 'Hidden', type: 'boolean' },
   { key: 'disposition', label: 'Disposition', type: 'number' },
-]
+];
 
 // ─── Scene sub-schema ─────────────────────────────────
 const SCENE_FIELDS: SchemaField[] = [
@@ -103,7 +103,7 @@ const SCENE_FIELDS: SchemaField[] = [
   { key: 'globalLight', label: 'Global Illumination', type: 'boolean' },
   { key: 'darkness', label: 'Darkness Level (0-1)', type: 'number' },
   { key: 'active', label: 'Currently Active', type: 'boolean' },
-]
+];
 
 // ─── All node schemas ──────────────────────────────────
 
@@ -119,9 +119,7 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'result',
         portLabel: 'Result',
         portType: 'number',
-        fields: [
-          { key: '', label: 'Roll Total', type: 'number', path: '' },
-        ],
+        fields: [{ key: '', label: 'Roll Total', type: 'number', path: '' }],
       },
     ],
     example: { result: 17 },
@@ -136,9 +134,7 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'value',
         portLabel: 'Value',
         portType: 'object',
-        fields: [
-          { key: '', label: 'Variable Value', type: 'object', path: '' },
-        ],
+        fields: [{ key: '', label: 'Variable Value', type: 'object', path: '' }],
       },
     ],
     example: { value: '42' },
@@ -181,10 +177,7 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'target',
         portLabel: 'Target',
         portType: 'token',
-        fields: [
-          ...TOKEN_FIELDS,
-          { key: 'actor', label: 'Actor (nested)', type: 'actor' },
-        ],
+        fields: [...TOKEN_FIELDS, { key: 'actor', label: 'Actor (nested)', type: 'actor' }],
       },
     ],
     example: {
@@ -224,25 +217,19 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'hp',
         portLabel: 'HP',
         portType: 'number',
-        fields: [
-          { key: '', label: 'Current HP', type: 'number', path: '' },
-        ],
+        fields: [{ key: '', label: 'Current HP', type: 'number', path: '' }],
       },
       {
         portId: 'maxHp',
         portLabel: 'Max HP',
         portType: 'number',
-        fields: [
-          { key: '', label: 'Max HP', type: 'number', path: '' },
-        ],
+        fields: [{ key: '', label: 'Max HP', type: 'number', path: '' }],
       },
       {
         portId: 'tempHp',
         portLabel: 'Temp HP',
         portType: 'number',
-        fields: [
-          { key: '', label: 'Temp HP', type: 'number', path: '' },
-        ],
+        fields: [{ key: '', label: 'Temp HP', type: 'number', path: '' }],
       },
     ],
     example: { hp: 42, maxHp: 50, tempHp: 5 },
@@ -257,9 +244,7 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'result',
         portLabel: 'Result',
         portType: 'boolean',
-        fields: [
-          { key: '', label: 'Condition Result', type: 'boolean', path: '' },
-        ],
+        fields: [{ key: '', label: 'Condition Result', type: 'boolean', path: '' }],
       },
     ],
     example: { result: true },
@@ -274,14 +259,12 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
         portId: 'result',
         portLabel: 'Result',
         portType: 'string',
-        fields: [
-          { key: '', label: 'Roll Result Text', type: 'string', path: '' },
-        ],
+        fields: [{ key: '', label: 'Roll Result Text', type: 'string', path: '' }],
       },
     ],
     example: { result: 'Potion of Healing' },
   },
-}
+};
 
 // ─── Helper Functions ──────────────────────────────────
 
@@ -289,7 +272,8 @@ export const NODE_SCHEMAS: Record<string, NodeSchema> = {
  * Get the schema for a node type
  */
 export function getNodeSchema(type: string): NodeSchema | undefined {
-  return NODE_SCHEMAS[type]
+  // eslint-disable-next-line security/detect-object-injection -- NODE_SCHEMAS is a const enum of known types
+  return NODE_SCHEMAS[type];
 }
 
 /**
@@ -297,11 +281,12 @@ export function getNodeSchema(type: string): NodeSchema | undefined {
  * Handles the root-level scalar case (empty key = the port value itself)
  */
 export function getPortFields(nodeType: string, portId: string): SchemaField[] {
-  const schema = NODE_SCHEMAS[nodeType]
-  if (!schema) return []
-  const port = schema.outputs.find((p) => p.portId === portId)
-  if (!port) return []
-  return port.fields
+  // eslint-disable-next-line security/detect-object-injection -- NODE_SCHEMAS is a const enum of known types
+  const schema = NODE_SCHEMAS[nodeType];
+  if (!schema) return [];
+  const port = schema.outputs.find((p) => p.portId === portId);
+  if (!port) return [];
+  return port.fields;
 }
 
 /**
@@ -309,18 +294,18 @@ export function getPortFields(nodeType: string, portId: string): SchemaField[] {
  * Takes node data + edges and returns a tree of available fields.
  */
 export interface DynamicContentNode {
-  nodeId: string
-  nodeType: string
-  nodeLabel: string
-  isConnected: boolean
-  ports: DynamicContentPort[]
+  nodeId: string;
+  nodeType: string;
+  nodeLabel: string;
+  isConnected: boolean;
+  ports: DynamicContentPort[];
 }
 
 export interface DynamicContentPort {
-  portId: string
-  portLabel: string
-  portType: string
-  fields: SchemaField[]
+  portId: string;
+  portLabel: string;
+  portType: string;
+  fields: SchemaField[];
 }
 
 /**
@@ -330,37 +315,37 @@ export interface DynamicContentPort {
 export function buildDynamicContentTree(
   nodes: Array<{ id: string; data: { type: string; label: string } }>,
   edges: Array<{ source: string; target: string; sourceHandle?: string | null }>,
-  currentNodeId: string
+  currentNodeId: string,
 ): DynamicContentNode[] {
   // Find all upstream nodes via transitive closure of edges
-  const upstreamNodes = new Set<string>()
+  const upstreamNodes = new Set<string>();
   function findUpstream(nodeId: string) {
     for (const edge of edges) {
       if (edge.target === nodeId) {
         if (!upstreamNodes.has(edge.source)) {
-          upstreamNodes.add(edge.source)
-          findUpstream(edge.source)
+          upstreamNodes.add(edge.source);
+          findUpstream(edge.source);
         }
       }
     }
   }
-  findUpstream(currentNodeId)
+  findUpstream(currentNodeId);
 
-  const result: DynamicContentNode[] = []
+  const result: DynamicContentNode[] = [];
 
   for (const node of nodes) {
-    if (node.id === currentNodeId) continue
-    const schema = NODE_SCHEMAS[node.data.type]
-    if (!schema) continue
+    if (node.id === currentNodeId) continue;
+    const schema = NODE_SCHEMAS[node.data.type];
+    if (!schema) continue;
 
     // Only include data-producing nodes (ones with output ports)
     const outputPorts = schema.outputs.filter((p) => {
-      return p.fields.length > 0
-    })
+      return p.fields.length > 0;
+    });
 
-    if (outputPorts.length === 0) continue
+    if (outputPorts.length === 0) continue;
 
-    const isConnected = upstreamNodes.has(node.id)
+    const isConnected = upstreamNodes.has(node.id);
 
     result.push({
       nodeId: node.id,
@@ -373,10 +358,10 @@ export function buildDynamicContentTree(
         portType: p.portType,
         fields: p.fields,
       })),
-    })
+    });
   }
 
-  return result
+  return result;
 }
 
 /**
@@ -384,152 +369,347 @@ export function buildDynamicContentTree(
  * Returns the field if the port has a single field with empty key.
  */
 export function getScalarPortField(nodeType: string, portId: string): SchemaField | null {
-  const fields = getPortFields(nodeType, portId)
+  const fields = getPortFields(nodeType, portId);
   if (fields.length === 1 && fields[0].key === '') {
-    return fields[0]
+    return fields[0];
   }
-  return null
+  return null;
 }
 
 // ─── Declarative Properties Panel Field Registry ──────────
 // Defines every field that appears in the properties panel per node type.
 // Powers the new expression-editor-aware properties panel.
 
-export type FieldDefType = 'text' | 'number' | 'select' | 'expression'
+export type FieldDefType = 'text' | 'number' | 'select' | 'expression';
 
 export interface NodeFieldDef {
-  key: string
-  label: string
-  type: FieldDefType
-  selectOptions?: { value: string; label: string }[]
-  placeholder?: string
-  expressionAllowed?: boolean  // Shows [fx] button
-  displayOrder?: number        // Lower = appears higher
-  hideFromPanel?: boolean      // true = internal field, don't show
+  key: string;
+  label: string;
+  type: FieldDefType;
+  selectOptions?: { value: string; label: string }[];
+  placeholder?: string;
+  expressionAllowed?: boolean; // Shows [fx] button
+  displayOrder?: number; // Lower = appears higher
+  hideFromPanel?: boolean; // true = internal field, don't show
 }
 
 export const NODE_FIELDS: Record<string, NodeFieldDef[]> = {
   // ── Actions ──
   rollDice: [
-    { key: 'formula', label: 'Formula', type: 'expression', placeholder: 'e.g. 1d20+5', expressionAllowed: true, displayOrder: 1 },
-    { key: 'flavor', label: 'Flavor Text', type: 'expression', placeholder: 'e.g. "Sneak Attack!"', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'formula',
+      label: 'Formula',
+      type: 'expression',
+      placeholder: 'e.g. 1d20+5',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'flavor',
+      label: 'Flavor Text',
+      type: 'expression',
+      placeholder: 'e.g. "Sneak Attack!"',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   dealDamage: [
-    { key: 'amount', label: 'Damage Amount', type: 'expression', placeholder: 'e.g. 10 or 1d8+3', expressionAllowed: true, displayOrder: 1 },
-    { key: 'target', label: 'Target Override', type: 'expression', placeholder: 'token, @uuid, or Actor name', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'amount',
+      label: 'Damage Amount',
+      type: 'expression',
+      placeholder: 'e.g. 10 or 1d8+3',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'target',
+      label: 'Target Override',
+      type: 'expression',
+      placeholder: 'token, @uuid, or Actor name',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   healTarget: [
-    { key: 'amount', label: 'Heal Amount', type: 'expression', placeholder: 'e.g. 10 or 2d4+3', expressionAllowed: true, displayOrder: 1 },
-    { key: 'target', label: 'Target Override', type: 'expression', placeholder: 'token, @uuid, or Actor name', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'amount',
+      label: 'Heal Amount',
+      type: 'expression',
+      placeholder: 'e.g. 10 or 2d4+3',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'target',
+      label: 'Target Override',
+      type: 'expression',
+      placeholder: 'token, @uuid, or Actor name',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   sendChat: [
-    { key: 'content', label: 'Message', type: 'expression', placeholder: 'e.g. "The goblin collapses!"', expressionAllowed: true, displayOrder: 1 },
-    { key: 'mode', label: 'Mode', type: 'select', selectOptions: [
-      { value: 'OOC', label: 'OOC (out of character)' },
-      { value: 'IC', label: 'IC (in character)' },
-      { value: 'EMOTE', label: 'Emote' },
-      { value: 'WHISPER', label: 'Whisper' },
-    ], displayOrder: 2 },
+    {
+      key: 'content',
+      label: 'Message',
+      type: 'expression',
+      placeholder: 'e.g. "The goblin collapses!"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'mode',
+      label: 'Mode',
+      type: 'select',
+      selectOptions: [
+        { value: 'OOC', label: 'OOC (out of character)' },
+        { value: 'IC', label: 'IC (in character)' },
+        { value: 'EMOTE', label: 'Emote' },
+        { value: 'WHISPER', label: 'Whisper' },
+      ],
+      displayOrder: 2,
+    },
   ],
   applyEffect: [
-    { key: 'effectName', label: 'Effect Name', type: 'expression', placeholder: 'e.g. Burning, Poisoned, Bless', expressionAllowed: true, displayOrder: 1 },
-    { key: 'amount', label: 'Duration (seconds)', type: 'expression', placeholder: 'e.g. 60', expressionAllowed: true, displayOrder: 2 },
-    { key: 'target', label: 'Target Override', type: 'expression', placeholder: 'token, @uuid, or Actor name', expressionAllowed: true, displayOrder: 3 },
+    {
+      key: 'effectName',
+      label: 'Effect Name',
+      type: 'expression',
+      placeholder: 'e.g. Burning, Poisoned, Bless',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'amount',
+      label: 'Duration (seconds)',
+      type: 'expression',
+      placeholder: 'e.g. 60',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
+    {
+      key: 'target',
+      label: 'Target Override',
+      type: 'expression',
+      placeholder: 'token, @uuid, or Actor name',
+      expressionAllowed: true,
+      displayOrder: 3,
+    },
   ],
   applyStatus: [
-    { key: 'statusId', label: 'Status Effect', type: 'select', selectOptions: [
-      { value: 'blinded', label: 'Blinded' },
-      { value: 'charmed', label: 'Charmed' },
-      { value: 'deafened', label: 'Deafened' },
-      { value: 'exhaustion', label: 'Exhaustion' },
-      { value: 'frightened', label: 'Frightened' },
-      { value: 'grappled', label: 'Grappled' },
-      { value: 'incapacitated', label: 'Incapacitated' },
-      { value: 'invisible', label: 'Invisible' },
-      { value: 'paralyzed', label: 'Paralyzed' },
-      { value: 'petrified', label: 'Petrified' },
-      { value: 'poisoned', label: 'Poisoned' },
-      { value: 'prone', label: 'Prone' },
-      { value: 'restrained', label: 'Restrained' },
-      { value: 'stunned', label: 'Stunned' },
-      { value: 'unconscious', label: 'Unconscious' },
-      { value: 'concentration', label: 'Concentration' },
-    ], displayOrder: 1 },
+    {
+      key: 'statusId',
+      label: 'Status Effect',
+      type: 'select',
+      selectOptions: [
+        { value: 'blinded', label: 'Blinded' },
+        { value: 'charmed', label: 'Charmed' },
+        { value: 'deafened', label: 'Deafened' },
+        { value: 'exhaustion', label: 'Exhaustion' },
+        { value: 'frightened', label: 'Frightened' },
+        { value: 'grappled', label: 'Grappled' },
+        { value: 'incapacitated', label: 'Incapacitated' },
+        { value: 'invisible', label: 'Invisible' },
+        { value: 'paralyzed', label: 'Paralyzed' },
+        { value: 'petrified', label: 'Petrified' },
+        { value: 'poisoned', label: 'Poisoned' },
+        { value: 'prone', label: 'Prone' },
+        { value: 'restrained', label: 'Restrained' },
+        { value: 'stunned', label: 'Stunned' },
+        { value: 'unconscious', label: 'Unconscious' },
+        { value: 'concentration', label: 'Concentration' },
+      ],
+      displayOrder: 1,
+    },
   ],
   abilityCheck: [
-    { key: 'ability', label: 'Ability', type: 'select', selectOptions: [
-      { value: 'str', label: 'Strength (STR)' },
-      { value: 'dex', label: 'Dexterity (DEX)' },
-      { value: 'con', label: 'Constitution (CON)' },
-      { value: 'int', label: 'Intelligence (INT)' },
-      { value: 'wis', label: 'Wisdom (WIS)' },
-      { value: 'cha', label: 'Charisma (CHA)' },
-    ], displayOrder: 1 },
-    { key: 'flavor', label: 'Flavor Text', type: 'expression', placeholder: 'e.g. "Bend Bars"', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'ability',
+      label: 'Ability',
+      type: 'select',
+      selectOptions: [
+        { value: 'str', label: 'Strength (STR)' },
+        { value: 'dex', label: 'Dexterity (DEX)' },
+        { value: 'con', label: 'Constitution (CON)' },
+        { value: 'int', label: 'Intelligence (INT)' },
+        { value: 'wis', label: 'Wisdom (WIS)' },
+        { value: 'cha', label: 'Charisma (CHA)' },
+      ],
+      displayOrder: 1,
+    },
+    {
+      key: 'flavor',
+      label: 'Flavor Text',
+      type: 'expression',
+      placeholder: 'e.g. "Bend Bars"',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   skillCheck: [
-    { key: 'skill', label: 'Skill', type: 'select', selectOptions: [
-      { value: 'acr', label: 'Acrobatics (DEX)' },
-      { value: 'ath', label: 'Athletics (STR)' },
-      { value: 'ste', label: 'Stealth (DEX)' },
-      { value: 'prc', label: 'Perception (WIS)' },
-      { value: 'inv', label: 'Investigation (INT)' },
-      { value: 'ins', label: 'Insight (WIS)' },
-      { value: 'dec', label: 'Deception (CHA)' },
-      { value: 'per', label: 'Persuasion (CHA)' },
-      { value: 'arc', label: 'Arcana (INT)' },
-      { value: 'his', label: 'History (INT)' },
-      { value: 'nat', label: 'Nature (INT)' },
-      { value: 'rel', label: 'Religion (INT)' },
-      { value: 'med', label: 'Medicine (WIS)' },
-      { value: 'ani', label: 'Animal Handling (WIS)' },
-      { value: 'sur', label: 'Survival (WIS)' },
-      { value: 'perf', label: 'Performance (CHA)' },
-      { value: 'int', label: 'Intimidation (CHA)' },
-    ], displayOrder: 1 },
-    { key: 'flavor', label: 'Flavor Text', type: 'expression', placeholder: 'e.g. "Search for traps"', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'skill',
+      label: 'Skill',
+      type: 'select',
+      selectOptions: [
+        { value: 'acr', label: 'Acrobatics (DEX)' },
+        { value: 'ath', label: 'Athletics (STR)' },
+        { value: 'ste', label: 'Stealth (DEX)' },
+        { value: 'prc', label: 'Perception (WIS)' },
+        { value: 'inv', label: 'Investigation (INT)' },
+        { value: 'ins', label: 'Insight (WIS)' },
+        { value: 'dec', label: 'Deception (CHA)' },
+        { value: 'per', label: 'Persuasion (CHA)' },
+        { value: 'arc', label: 'Arcana (INT)' },
+        { value: 'his', label: 'History (INT)' },
+        { value: 'nat', label: 'Nature (INT)' },
+        { value: 'rel', label: 'Religion (INT)' },
+        { value: 'med', label: 'Medicine (WIS)' },
+        { value: 'ani', label: 'Animal Handling (WIS)' },
+        { value: 'sur', label: 'Survival (WIS)' },
+        { value: 'perf', label: 'Performance (CHA)' },
+        { value: 'int', label: 'Intimidation (CHA)' },
+      ],
+      displayOrder: 1,
+    },
+    {
+      key: 'flavor',
+      label: 'Flavor Text',
+      type: 'expression',
+      placeholder: 'e.g. "Search for traps"',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   concentrationSave: [
-    { key: 'damageAmount', label: 'Damage Taken', type: 'expression', placeholder: 'e.g. 14', expressionAllowed: true, displayOrder: 1 },
+    {
+      key: 'damageAmount',
+      label: 'Damage Taken',
+      type: 'expression',
+      placeholder: 'e.g. 14',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
   ],
   deathSave: [
     // No configurable fields
   ],
   rollTable: [
-    { key: 'tableName', label: 'Table Name', type: 'expression', placeholder: 'e.g. "Treasure Horde"', expressionAllowed: true, displayOrder: 1 },
-    { key: 'tableId', label: 'Table ID (fallback)', type: 'text', placeholder: 'UUID if name fails', displayOrder: 2 },
+    {
+      key: 'tableName',
+      label: 'Table Name',
+      type: 'expression',
+      placeholder: 'e.g. "Treasure Horde"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'tableId',
+      label: 'Table ID (fallback)',
+      type: 'text',
+      placeholder: 'UUID if name fails',
+      displayOrder: 2,
+    },
   ],
   playSound: [
-    { key: 'playlistName', label: 'Playlist Name', type: 'expression', placeholder: 'e.g. "Battle Themes"', expressionAllowed: true, displayOrder: 1 },
-    { key: 'soundName', label: 'Sound Name', type: 'expression', placeholder: 'e.g. "Thunderclap"', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'playlistName',
+      label: 'Playlist Name',
+      type: 'expression',
+      placeholder: 'e.g. "Battle Themes"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'soundName',
+      label: 'Sound Name',
+      type: 'expression',
+      placeholder: 'e.g. "Thunderclap"',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   toggleScene: [
-    { key: 'sceneName', label: 'Scene Name', type: 'expression', placeholder: 'e.g. "The Dark Forest"', expressionAllowed: true, displayOrder: 1 },
-    { key: 'sceneId', label: 'Scene ID (fallback)', type: 'text', placeholder: 'UUID if name fails', displayOrder: 2 },
+    {
+      key: 'sceneName',
+      label: 'Scene Name',
+      type: 'expression',
+      placeholder: 'e.g. "The Dark Forest"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
+    {
+      key: 'sceneId',
+      label: 'Scene ID (fallback)',
+      type: 'text',
+      placeholder: 'UUID if name fails',
+      displayOrder: 2,
+    },
   ],
   // ── Logic ──
   condition: [
-    { key: 'condition', label: 'Expression', type: 'text', placeholder: 'Or use the fx button to build conditions', expressionAllowed: true, displayOrder: 1 },
+    {
+      key: 'condition',
+      label: 'Expression',
+      type: 'text',
+      placeholder: 'Or use the fx button to build conditions',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
   ],
   // ── Data ──
   variable: [
     { key: 'name', label: 'Variable Name', type: 'text', placeholder: 'myVar', displayOrder: 1 },
-    { key: 'value', label: 'Value', type: 'expression', placeholder: '42 or "hello" or rollResult', expressionAllowed: true, displayOrder: 2 },
+    {
+      key: 'value',
+      label: 'Value',
+      type: 'expression',
+      placeholder: '42 or "hello" or rollResult',
+      expressionAllowed: true,
+      displayOrder: 2,
+    },
   ],
   // ── Search / Data Source ──
   searchActors: [
-    { key: 'actorQuery', label: 'Actor Name', type: 'expression', placeholder: 'e.g. "Gandalf" or "Goblin #3"', expressionAllowed: true, displayOrder: 1 },
+    {
+      key: 'actorQuery',
+      label: 'Actor Name',
+      type: 'expression',
+      placeholder: 'e.g. "Gandalf" or "Goblin #3"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
   ],
   searchTargets: [],
   searchScenes: [
-    { key: 'sceneName', label: 'Scene Name', type: 'expression', placeholder: 'e.g. "The Dark Forest"', expressionAllowed: true, displayOrder: 1 },
+    {
+      key: 'sceneName',
+      label: 'Scene Name',
+      type: 'expression',
+      placeholder: 'e.g. "The Dark Forest"',
+      expressionAllowed: true,
+      displayOrder: 1,
+    },
   ],
   getActorHP: [],
   runMacro: [
-    { key: 'macroName', label: 'Macro Name', type: 'text', placeholder: '"Healing Word" or "Fireball"', displayOrder: 1 },
-    { key: 'macroUuid', label: 'Macro UUID', type: 'text', placeholder: 'UUID from Foundry', displayOrder: 2 },
+    {
+      key: 'macroName',
+      label: 'Macro Name',
+      type: 'text',
+      placeholder: '"Healing Word" or "Fireball"',
+      displayOrder: 1,
+    },
+    {
+      key: 'macroUuid',
+      label: 'Macro UUID',
+      type: 'text',
+      placeholder: 'UUID from Foundry',
+      displayOrder: 2,
+    },
   ],
-}
+};
 
 /**
  * Get field definitions for a node type, including module-mapped properties.
@@ -537,7 +717,12 @@ export const NODE_FIELDS: Record<string, NodeFieldDef[]> = {
 export function getNodeFields(
   nodeType: string,
   moduleId?: string,
-  moduleNodeFields?: { key: string; label: string; type: string; options?: { value: string; label: string }[] }[]
+  moduleNodeFields?: {
+    key: string;
+    label: string;
+    type: string;
+    options?: { value: string; label: string }[];
+  }[],
 ): NodeFieldDef[] {
   // Module-mapped nodes get their fields from the mapping definition
   if (moduleId && moduleNodeFields) {
@@ -548,7 +733,8 @@ export function getNodeFields(
       selectOptions: f.options,
       expressionAllowed: f.type !== 'select',
       placeholder: `Enter ${f.label.toLowerCase()}...`,
-    }))
+    }));
   }
-  return NODE_FIELDS[nodeType] || []
+  // eslint-disable-next-line security/detect-object-injection -- NODE_FIELDS is a const enum of known types
+  return NODE_FIELDS[nodeType] || [];
 }

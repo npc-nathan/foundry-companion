@@ -12,43 +12,41 @@
  *    and generateCode functions that emit real Foundry API calls
  */
 
-import { relay } from './relay'
-
 // ─── Types ──────────────────────────────────────────────────
 
 export interface ModuleNodeProperty {
-  key: string
-  label: string
-  type: 'text' | 'select' | 'number' | 'actor'
-  placeholder?: string
+  key: string;
+  label: string;
+  type: 'text' | 'select' | 'number' | 'actor';
+  placeholder?: string;
   /** For 'select' type: static options */
-  options?: { value: string; label: string }[]
+  options?: { value: string; label: string }[];
   /** For 'select' type: fetch from relay at mount */
-  dynamicSource?: 'actors' | 'macros' | 'scenes' | 'playlists' | 'tables' | 'effects'
+  dynamicSource?: 'actors' | 'macros' | 'scenes' | 'playlists' | 'tables' | 'effects';
 }
 
 export interface ModuleNodeDef {
-  type: string
-  label: string
-  description: string
-  properties: ModuleNodeProperty[]
+  type: string;
+  label: string;
+  description: string;
+  properties: ModuleNodeProperty[];
   /** Generate the Foundry JavaScript code for this node */
-  generateCode: (data: Record<string, string>) => string[]
+  generateCode: (data: Record<string, string>) => string[];
 }
 
 export interface ModuleMapping {
-  id: string
-  label: string
-  description: string
-  docs?: string
-  nodes: ModuleNodeDef[]
+  id: string;
+  label: string;
+  description: string;
+  docs?: string;
+  nodes: ModuleNodeDef[];
 }
 
 // ─── Helper: sanitize strings for code gen ──────────────────
 
-const esc = (s: string) => s.replace(/"/g, '\\"')
-const escBlock = (s: string) => s.replace(/`/g, '\\`').replace(/\$/g, '\\$')
-const intVal = (s: string | undefined, fallback = 0) => String(parseInt(s || String(fallback)) || fallback)
+const esc = (s: string) => s.replace(/"/g, '\\"');
+const intVal = (s: string | undefined, fallback = 0) =>
+  String(parseInt(s || String(fallback)) || fallback);
 
 // ─── DFreds Convenient Effects ──────────────────────────────
 // Docs: https://github.com/DFreds/dfreds-convenient-effects
@@ -73,7 +71,7 @@ const CE_EFFECT_OPTIONS: { value: string; label: string }[] = [
   { value: 'Bane', label: 'Bane' },
   { value: 'Shield of Faith', label: 'Shield of Faith' },
   { value: 'Bless', label: 'Bless' },
-]
+];
 
 const dfredsCE: ModuleMapping = {
   id: 'dfreds-convenient-effects',
@@ -104,13 +102,17 @@ const dfredsCE: ModuleMapping = {
         '// --- DFreds Convenient Effects: Apply (e.g. applies Burning to Goblin) ---',
         d.effectName ? `const effectName = "${esc(d.effectName)}"` : 'const effectName = "Burning"',
         d.target
-          ? `const targetToken = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const targetToken = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const targetToken = token',
         "if (!targetToken) { ui.notifications.warn('No target selected'); return }",
         d.duration && parseInt(d.duration) > 0
-          ? `game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid, { seconds: ${parseInt(d.duration) * 6} })`
+          ? `game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid, { seconds: ${
+              parseInt(d.duration) * 6
+            } })`
           : 'game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid)',
-        "ui.notifications.info(`Applied ${effectName}`)",
+        'ui.notifications.info(`Applied ${effectName}`)',
         '',
       ],
     },
@@ -131,16 +133,18 @@ const dfredsCE: ModuleMapping = {
         '// --- DFreds Convenient Effects: Remove ---',
         d.effectName ? `const effectName = "${esc(d.effectName)}"` : 'const effectName = "Burning"',
         d.target
-          ? `const targetToken = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const targetToken = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const targetToken = token',
         "if (!targetToken) { ui.notifications.warn('No target selected'); return }",
         'game.dfreds.effects.removeEffectFromTarget(effectName, targetToken.actor.uuid)',
-        "ui.notifications.info(`Removed ${effectName}`)",
+        'ui.notifications.info(`Removed ${effectName}`)',
         '',
       ],
     },
   ],
-}
+};
 
 // ─── DAE (Dynamic Active Effects) ────────────────────────────
 // Docs: https://gitlab.com/tposney/dae
@@ -156,7 +160,12 @@ const dae: ModuleMapping = {
       label: 'DAE: Apply Effect',
       description: 'Apply a DAE effect to an actor',
       properties: [
-        { key: 'effectName', label: 'Effect Name', type: 'text', placeholder: 'e.g. My Custom Effect' },
+        {
+          key: 'effectName',
+          label: 'Effect Name',
+          type: 'text',
+          placeholder: 'e.g. My Custom Effect',
+        },
         { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
         { key: 'duration', label: 'Duration (seconds)', type: 'number', placeholder: '60' },
       ],
@@ -164,7 +173,9 @@ const dae: ModuleMapping = {
         '// --- DAE: Apply Effect ---',
         `const effName = "${esc(d.effectName || '')}"`,
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         `await game.dae.applyEffect(effName, tgt.actor)`,
@@ -176,14 +187,21 @@ const dae: ModuleMapping = {
       label: 'DAE: Remove Effect',
       description: 'Remove a DAE effect from an actor',
       properties: [
-        { key: 'effectName', label: 'Effect Name', type: 'text', placeholder: 'e.g. My Custom Effect' },
+        {
+          key: 'effectName',
+          label: 'Effect Name',
+          type: 'text',
+          placeholder: 'e.g. My Custom Effect',
+        },
         { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
       ],
       generateCode: (d) => [
         '// --- DAE: Remove Effect ---',
         `const effName = "${esc(d.effectName || '')}"`,
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         `await game.dae.removeEffect(effName, tgt.actor)`,
@@ -200,7 +218,9 @@ const dae: ModuleMapping = {
       generateCode: (d) => [
         '// --- DAE: Clear All Effects ---',
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         'const effects = tgt.actor.effects.filter(e => !e.getFlag("core","statusId"))',
@@ -209,7 +229,7 @@ const dae: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Sequencer ───────────────────────────────────────────────
 // Docs: https://github.com/fantasy-calendar/sequencer
@@ -225,7 +245,12 @@ const sequencer: ModuleMapping = {
       label: 'Sequencer: Play Effect',
       description: 'Play a visual effect at a location',
       properties: [
-        { key: 'effectFile', label: 'Effect File Path', type: 'text', placeholder: 'modules/jb2a_pack/...' },
+        {
+          key: 'effectFile',
+          label: 'Effect File Path',
+          type: 'text',
+          placeholder: 'modules/jb2a_pack/...',
+        },
         { key: 'target', label: 'Target Token', type: 'text', placeholder: '@token or name' },
         { key: 'scale', label: 'Scale', type: 'number', placeholder: '1.0' },
         { key: 'duration', label: 'Duration (ms)', type: 'number', placeholder: '2000' },
@@ -234,7 +259,9 @@ const sequencer: ModuleMapping = {
         '// --- Sequencer: Play Effect ---',
         `const file = "${esc(d.effectFile || '')}"`,
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         'if (!file) { ui.notifications.warn("No effect file specified"); return }',
@@ -253,7 +280,12 @@ const sequencer: ModuleMapping = {
       label: 'Sequencer: Play Sound',
       description: 'Play a sound effect via Sequencer',
       properties: [
-        { key: 'soundFile', label: 'Sound File Path', type: 'text', placeholder: 'modules/.../sound.ogg' },
+        {
+          key: 'soundFile',
+          label: 'Sound File Path',
+          type: 'text',
+          placeholder: 'modules/.../sound.ogg',
+        },
         { key: 'target', label: 'Target Token', type: 'text', placeholder: '@token' },
         { key: 'volume', label: 'Volume (0-1)', type: 'number', placeholder: '0.5' },
       ],
@@ -261,7 +293,9 @@ const sequencer: ModuleMapping = {
         '// --- Sequencer: Play Sound ---',
         `const sndFile = "${esc(d.soundFile || '')}"`,
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         'if (!sndFile) { ui.notifications.warn("No sound file specified"); return }',
@@ -275,7 +309,7 @@ const sequencer: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── FXMaster ────────────────────────────────────────────────
 // Docs: https://github.com/ghost-fvtt/fxmaster
@@ -345,12 +379,12 @@ const fxmaster: ModuleMapping = {
         `const filter = "${esc(d.filterType || '')}"`,
         "if (!filter) { ui.notifications.warn('No filter selected'); return }",
         'canvas.effects.filters.set(filter, true)',
-        "ui.notifications.info(`Applied ${filter} filter`)",
+        'ui.notifications.info(`Applied ${filter} filter`)',
         '',
       ],
     },
   ],
-}
+};
 
 // ─── Item Macro ──────────────────────────────────────────────
 // Docs: https://github.com/ruipin/fvtt-item-macro
@@ -372,17 +406,19 @@ const itemacro: ModuleMapping = {
       generateCode: (d) => [
         '// --- Item Macro: Execute ---',
         d.target
-          ? `const actor = game.actors.getName("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")?.actor`
+          ? `const actor = game.actors.getName("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")?.actor`
           : 'const actor = token?.actor',
         "if (!actor) { ui.notifications.warn('No target actor'); return }",
         `const item = actor.items.getName("${esc(d.itemName || '')}")`,
-        "if (!item) { ui.notifications.warn(`Item \"${esc(d.itemName || '')}\" not found`); return }",
+        'if (!item) { ui.notifications.warn(`Item "${esc(d.itemName || \'\')}" not found`); return }',
         'await item.executeMacro?.()',
         '',
       ],
     },
   ],
-}
+};
 
 // ─── Smart Target ────────────────────────────────────────────
 // Docs: https://github.com/theripper93/smart-target
@@ -422,7 +458,7 @@ const smarttarget: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Monk's Active Tile Triggers ─────────────────────────────
 // Docs: https://github.com/ironmonk88/monks-active-tiles
@@ -442,14 +478,16 @@ const monksActiveTiles: ModuleMapping = {
       ],
       generateCode: (d) => [
         '// --- MAT: Trigger Tile ---',
-        `const tile = canvas.tiles.placeables.find(t => t.document.name === "${esc(d.tileName || '')}")`,
+        `const tile = canvas.tiles.placeables.find(t => t.document.name === "${esc(
+          d.tileName || '',
+        )}")`,
         "if (!tile) { ui.notifications.warn('Tile not found'); return }",
         'try { await tile.document.trigger(token) } catch(e) { console.error(e) }',
         '',
       ],
     },
   ],
-}
+};
 
 // ─── Dice So Nice ────────────────────────────────────────────
 // Docs: https://gitlab.com/riccisi/foundryvtt-dice-so-nice
@@ -479,7 +517,7 @@ const diceSoNice: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Wall Height ─────────────────────────────────────────────
 // Docs: https://github.com/theripper93/wall-height
@@ -501,7 +539,9 @@ const wallHeight: ModuleMapping = {
       generateCode: (d) => [
         '// --- Wall Height: Set Elevation ---',
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         `await tgt.document.update({"elevation": ${intVal(d.elevation, 1)}})`,
@@ -509,7 +549,7 @@ const wallHeight: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Levels ──────────────────────────────────────────────────
 // Docs: https://github.com/theripper93/levels
@@ -532,18 +572,23 @@ const levels: ModuleMapping = {
       generateCode: (d) => [
         '// --- Levels: Set Token Level ---',
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         `tgt.document.update({
   "elevation": ${intVal(d.rangeBottom, 0)},
-  "flags.levels": { "rangeBottom": ${intVal(d.rangeBottom, 0)}, "rangeTop": ${intVal(d.rangeTop, 5)} }
+  "flags.levels": { "rangeBottom": ${intVal(d.rangeBottom, 0)}, "rangeTop": ${intVal(
+    d.rangeTop,
+    5,
+  )} }
 })`,
         '',
       ],
     },
   ],
-}
+};
 
 // ─── Automated Animations ────────────────────────────────────
 // Docs: https://github.com/otigon/automated-jb2a-animations
@@ -559,19 +604,26 @@ const autoAnimations: ModuleMapping = {
       label: 'AutoAnimations: Test Animation',
       description: 'Play a test animation on selected token',
       properties: [
-        { key: 'animationType', label: 'Animation Type', type: 'select', options: [
-          { value: 'melee', label: 'Melee Attack' },
-          { value: 'ranged', label: 'Ranged Attack' },
-          { value: 'spell', label: 'Spell Cast' },
-          { value: 'heal', label: 'Healing' },
-          { value: 'buff', label: 'Buff' },
-        ]},
+        {
+          key: 'animationType',
+          label: 'Animation Type',
+          type: 'select',
+          options: [
+            { value: 'melee', label: 'Melee Attack' },
+            { value: 'ranged', label: 'Ranged Attack' },
+            { value: 'spell', label: 'Spell Cast' },
+            { value: 'heal', label: 'Healing' },
+            { value: 'buff', label: 'Buff' },
+          ],
+        },
         { key: 'target', label: 'Target', type: 'text', placeholder: '@target' },
       ],
       generateCode: (d) => [
         '// --- AutoAnimations: Test Animation ---',
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         `const animType = "${esc(d.animationType || 'melee')}"`,
@@ -581,7 +633,7 @@ const autoAnimations: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Active Auras ────────────────────────────────────────────
 // Docs: https://github.com/kandashi/Active-Auras
@@ -597,12 +649,19 @@ const activeAuras: ModuleMapping = {
       label: 'Active Auras: Refresh',
       description: 'Force refresh all active auras',
       properties: [
-        { key: 'target', label: 'Target Token', type: 'text', placeholder: '(optional) @token name' },
+        {
+          key: 'target',
+          label: 'Target Token',
+          type: 'text',
+          placeholder: '(optional) @token name',
+        },
       ],
       generateCode: (d) => [
         '// --- Active Auras: Refresh ---',
         d.target
-          ? `const tgt = canvas.tokens.get("${esc(d.target)}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
+          ? `const tgt = canvas.tokens.get("${esc(
+              d.target,
+            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
           : 'const tgt = token',
         "if (!tgt) { ui.notifications.warn('No target'); return }",
         '// ActiveAuras recalculates automatically',
@@ -611,7 +670,7 @@ const activeAuras: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── Monk's Wall Enhancement ─────────────────────────────────
 // Docs: https://github.com/ironmonk88/monks-wall-enhancement
@@ -627,20 +686,25 @@ const monksWallEnhancement: ModuleMapping = {
       label: 'MWE: Toggle Wall Door',
       description: 'Toggle a wall door state',
       properties: [
-        { key: 'wallName', label: 'Wall ID or Direction', type: 'text', placeholder: 'e.g. wall direction: top' },
+        {
+          key: 'wallName',
+          label: 'Wall ID or Direction',
+          type: 'text',
+          placeholder: 'e.g. wall direction: top',
+        },
       ],
-      generateCode: (d) => [
+      generateCode: () => [
         '// --- MWE: Toggle Wall Door ---',
         '// Toggle first door in scene',
         'const doorWalls = canvas.walls.placeables.filter(w => w.document.door === CONST.WALL_DOOR_TYPES.DOOR)',
         "if (doorWalls.length === 0) { ui.notifications.warn('No doors found'); return }",
-        "const wall = doorWalls[0]",
+        'const wall = doorWalls[0]',
         'wall.document.update({ds: wall.document.ds === 1 ? 0 : 1})',
         '',
       ],
     },
   ],
-}
+};
 
 // ─── Dice Calculator (Dice Tray) ─────────────────────────────
 // Docs: https://github.com/theripper93/dice-calculator
@@ -655,9 +719,7 @@ const diceCalculator: ModuleMapping = {
       type: 'dt-roll',
       label: 'Dice Tray: Roll Formula',
       description: 'Roll a formula via Dice Tray',
-      properties: [
-        { key: 'formula', label: 'Formula', type: 'text', placeholder: '1d20+5' },
-      ],
+      properties: [{ key: 'formula', label: 'Formula', type: 'text', placeholder: '1d20+5' }],
       generateCode: (d) => [
         '// --- Dice Tray: Roll Formula ---',
         `const roll = await new Roll("${esc(d.formula || '1d20')}").roll({async: true})`,
@@ -666,37 +728,38 @@ const diceCalculator: ModuleMapping = {
       ],
     },
   ],
-}
+};
 
 // ─── All mapped modules ──────────────────────────────────────
 
 export const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
   'dfreds-convenient-effects': dfredsCE,
-  'dae': dae,
-  'sequencer': sequencer,
-  'fxmaster': fxmaster,
-  'itemacro': itemacro,
-  'smarttarget': smarttarget,
+  dae: dae,
+  sequencer: sequencer,
+  fxmaster: fxmaster,
+  itemacro: itemacro,
+  smarttarget: smarttarget,
   'monks-active-tiles': monksActiveTiles,
   'dice-so-nice': diceSoNice,
   'wall-height': wallHeight,
-  'levels': levels,
-  'autoanimations': autoAnimations,
-  'ActiveAuras': activeAuras,
+  levels: levels,
+  autoanimations: autoAnimations,
+  ActiveAuras: activeAuras,
   'monks-wall-enhancement': monksWallEnhancement,
   'dice-calculator': diceCalculator,
-}
+};
 
 /**
  * Get the mapping for a module if it exists
  */
 export function getModuleMapping(moduleId: string): ModuleMapping | null {
-  return MODULE_MAPPINGS[moduleId] ?? null
+  // eslint-disable-next-line security/detect-object-injection
+  return MODULE_MAPPINGS[moduleId] ?? null;
 }
 
 /**
  * Get all module IDs that have known mappings
  */
 export function getKnownModuleIds(): string[] {
-  return Object.keys(MODULE_MAPPINGS)
+  return Object.keys(MODULE_MAPPINGS);
 }

@@ -1,60 +1,60 @@
-import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface Config {
-  relayUrl: string
-  apiKey: string
-  clientId: string
-  clientName: string
-  role: "gm" | "player"
-  sessionId?: string
+  relayUrl: string;
+  apiKey: string;
+  clientId: string;
+  clientName: string;
+  role: 'gm' | 'player';
+  sessionId?: string;
 }
 
 interface UIConfig {
-  sidebarOpen: boolean
-  theme: "dark" | "light"
+  sidebarOpen: boolean;
+  theme: 'dark' | 'light';
 }
 
 interface Status {
-  connected: boolean
-  online: boolean
-  connecting: boolean
-  error: string | null
+  connected: boolean;
+  online: boolean;
+  connecting: boolean;
+  error: string | null;
 }
 
 interface AppState {
-  config: Config
-  status: Status
-  ui: UIConfig
+  config: Config;
+  status: Status;
+  ui: UIConfig;
 
-  setConfig: (config: Partial<Config>) => void
-  setConnected: (connected: boolean) => void
-  setStatus: (status: "connected" | "connecting" | "disconnected") => void
-  setError: (error: string | null) => void
-  toggleSidebar: () => void
-  toggleTheme: () => void
-  reset: () => void
+  setConfig: (config: Partial<Config>) => void;
+  setConnected: (connected: boolean) => void;
+  setStatus: (status: 'connected' | 'connecting' | 'disconnected') => void;
+  setError: (error: string | null) => void;
+  toggleSidebar: () => void;
+  toggleTheme: () => void;
+  reset: () => void;
 }
 
 const defaultConfig: Config = {
-  relayUrl: "",
-  apiKey: "",
-  clientId: "",
-  clientName: "",
-  role: "gm",
-}
+  relayUrl: '',
+  apiKey: '',
+  clientId: '',
+  clientName: '',
+  role: 'gm',
+};
 
 const defaultUi: UIConfig = {
   sidebarOpen: true,
-  theme: "dark",
-}
+  theme: 'dark',
+};
 
 const defaultStatus: Status = {
   connected: false,
   online: false,
   connecting: false,
   error: null,
-}
+};
 
 export const useStore = create<AppState>()(
   persist(
@@ -64,46 +64,46 @@ export const useStore = create<AppState>()(
       ui: defaultUi,
 
       setConfig: (partial) => {
-        set({ config: { ...get().config, ...partial } })
+        set({ config: { ...get().config, ...partial } });
       },
 
       setConnected: (connected) => {
-        set({ status: { ...get().status, connected, connecting: false, error: null } })
+        set({ status: { ...get().status, connected, connecting: false, error: null } });
       },
 
       setStatus: (status) => {
         set({
           status: {
             ...get().status,
-            connected: status === "connected",
-            connecting: status === "connecting",
-            error: status === "disconnected" ? "Disconnected" : null,
+            connected: status === 'connected',
+            connecting: status === 'connecting',
+            error: status === 'disconnected' ? 'Disconnected' : null,
           },
-        })
+        });
       },
 
       setError: (error) => {
-        set({ status: { ...get().status, error } })
+        set({ status: { ...get().status, error } });
       },
 
       toggleSidebar: () => {
-        set({ ui: { ...get().ui, sidebarOpen: !get().ui.sidebarOpen } })
+        set({ ui: { ...get().ui, sidebarOpen: !get().ui.sidebarOpen } });
       },
 
       toggleTheme: () => {
-        set({ ui: { ...get().ui, theme: get().ui.theme === "dark" ? "light" : "dark" } })
+        set({ ui: { ...get().ui, theme: get().ui.theme === 'dark' ? 'light' : 'dark' } });
       },
 
       reset: () => {
-        set({ config: defaultConfig, status: defaultStatus })
+        set({ config: defaultConfig, status: defaultStatus });
       },
     }),
     {
-      name: "foundry-companion",
+      name: 'foundry-companion',
       partialize: (state) => ({
         config: state.config,
         ui: state.ui,
       }),
-    }
-  )
-)
+    },
+  ),
+);

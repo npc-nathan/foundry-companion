@@ -68,40 +68,40 @@ app/gm/macros/page.tsx
 
 ### Palette Nodes
 
-| Node Type | Description |
-|-----------|-------------|
-| **Roll Dice** | Roll a dice formula, output the result |
-| **Send Chat** | Send a message to the chat |
-| **Apply Effect** | Apply a status effect to a token/actor |
-| **Condition** | Branching logic (if/else) with Expression Editor |
-| **Variable** | Store and manipulate variables |
-| **Run Macro** | Execute another macro by name/UUID |
-| **Search Actors** | Find actors by query string |
-| **Search Targets** | Find targeted tokens |
-| **Search Scenes** | Find scenes by query |
-| **Get HP** | Get or set HP value on an actor |
-| **Roll Table** | Roll on a Rollable Table |
+| Node Type          | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| **Roll Dice**      | Roll a dice formula, output the result           |
+| **Send Chat**      | Send a message to the chat                       |
+| **Apply Effect**   | Apply a status effect to a token/actor           |
+| **Condition**      | Branching logic (if/else) with Expression Editor |
+| **Variable**       | Store and manipulate variables                   |
+| **Run Macro**      | Execute another macro by name/UUID               |
+| **Search Actors**  | Find actors by query string                      |
+| **Search Targets** | Find targeted tokens                             |
+| **Search Scenes**  | Find scenes by query                             |
+| **Get HP**         | Get or set HP value on an actor                  |
+| **Roll Table**     | Roll on a Rollable Table                         |
 
 ### Module Integration Nodes
 
 The node editor includes templates for 15+ popular Foundry modules:
 
-| Module | Node Types |
-|--------|------------|
+| Module                        | Node Types                      |
+| ----------------------------- | ------------------------------- |
 | **DFreds Convenient Effects** | Apply/remove convenient effects |
-| **DAE** | Dynamic Active Effects setup |
-| **Sequencer** | Play sequences and animations |
-| **FXMaster** | Apply/remove visual filters |
-| **Item Macro** | Execute item-linked macros |
-| **Smart Target** | Target management |
-| **Monk's Active Tiles** | Trigger tile interactions |
-| **Dice So Nice** | Configure 3D dice appearance |
-| **Wall Height** | Manage wall elevation |
-| **Levels** | Multi-level scene features |
-| **Automated Animations** | Trigger automated animations |
-| **Active Auras** | Manage aura effects |
-| **Monk's Wall Enhancement** | Enhanced wall controls |
-| **Dice Calculator** | Dice calculation utilities |
+| **DAE**                       | Dynamic Active Effects setup    |
+| **Sequencer**                 | Play sequences and animations   |
+| **FXMaster**                  | Apply/remove visual filters     |
+| **Item Macro**                | Execute item-linked macros      |
+| **Smart Target**              | Target management               |
+| **Monk's Active Tiles**       | Trigger tile interactions       |
+| **Dice So Nice**              | Configure 3D dice appearance    |
+| **Wall Height**               | Manage wall elevation           |
+| **Levels**                    | Multi-level scene features      |
+| **Automated Animations**      | Trigger automated animations    |
+| **Active Auras**              | Manage aura effects             |
+| **Monk's Wall Enhancement**   | Enhanced wall controls          |
+| **Dice Calculator**           | Dice calculation utilities      |
 
 These are defined in `lib/module-mappings.ts`.
 
@@ -114,6 +114,7 @@ The Expression Editor allows building conditions for the **Condition** node.
 ### Modes
 
 1. **Simple Mode**: Row-based condition builder
+
    - Select a field from upstream node outputs
    - Choose an operator (===, !==, >, <, >=, <=, contains, startsWith, etc.)
    - Enter a value
@@ -127,6 +128,7 @@ The Expression Editor allows building conditions for the **Condition** node.
 ### Data Field Selection
 
 When clicking the field selector, the editor shows available outputs from:
+
 - Connected upstream nodes (based on edges)
 - Each output's type (string, number, boolean, actor, token, scene, etc.)
 
@@ -173,13 +175,13 @@ The "Export Code" button in the Node Builder traverses the React Flow graph and 
 
 All macro operations go through the relay proxy:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET /macros` | `relay.getMacros()` | List all macros |
-| `POST /macros` | `relay.createMacro({name, type, scope, command})` | Create a macro |
-| `PATCH /macros?uuid=X` | `relay.updateMacro(uuid, {data})` | Update a macro |
-| `DELETE /macros?uuid=X` | `relay.deleteMacro(uuid)` | Delete a macro |
-| `POST /macros/evaluate` | `relay.executeMacro(uuid)` | Execute a macro |
+| Method                  | Endpoint                                          | Description     |
+| ----------------------- | ------------------------------------------------- | --------------- |
+| `GET /macros`           | `relay.getMacros()`                               | List all macros |
+| `POST /macros`          | `relay.createMacro({name, type, scope, command})` | Create a macro  |
+| `PATCH /macros?uuid=X`  | `relay.updateMacro(uuid, {data})`                 | Update a macro  |
+| `DELETE /macros?uuid=X` | `relay.deleteMacro(uuid)`                         | Delete a macro  |
+| `POST /macros/evaluate` | `relay.executeMacro(uuid)`                        | Execute a macro |
 
 ---
 
@@ -201,6 +203,7 @@ type FieldDefinition = {
 ```
 
 Schemas enable:
+
 - Type-safe field selection in the Expression Editor
 - Validation of connected node outputs
 - Auto-completion when building conditions
@@ -213,13 +216,13 @@ The module mappings define code generation templates for third-party Foundry mod
 
 ```typescript
 type ModuleMapping = {
-  moduleId: string;        // Foundry module ID
-  moduleName: string;      // Display name
+  moduleId: string; // Foundry module ID
+  moduleName: string; // Display name
   nodes: Array<{
-    type: string;          // Node type identifier
-    label: string;         // Display label
-    config: NodeConfig;    // Configuration schema
-    generateCode: (config: NodeConfig) => string;  // Code generator
+    type: string; // Node type identifier
+    label: string; // Display label
+    config: NodeConfig; // Configuration schema
+    generateCode: (config: NodeConfig) => string; // Code generator
   }>;
 };
 ```

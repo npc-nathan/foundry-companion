@@ -1,43 +1,45 @@
-"use client"
+'use client';
 
-import { useStore } from "@/lib/store"
-import { relay } from "@/lib/relay"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Heart, Swords, Shield, Activity } from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
+import { useStore } from '@/lib/store';
+import { relay } from '@/lib/relay';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Swords, Shield, Activity } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 export default function PlayerDashboard() {
-  const config = useStore((s) => s.config)
+  const config = useStore((s) => s.config);
 
   const { data: structure } = useQuery({
     queryKey: ['structure', 'Scene'],
     queryFn: () => relay.structure('Scene', 'true'),
-  })
+  });
 
-  const scenes: Array<{ name: string; active: boolean }> = (structure as any)?.data?.entities?.scenes || []
-  const activeScene = scenes.find((s) => s.active)
-  const sceneCount = scenes.length
+  const scenes: Array<{ name: string; active: boolean }> =
+    (structure as { data?: { entities?: { scenes?: Array<{ name: string; active: boolean }> } } })
+      ?.data?.entities?.scenes || [];
+  const activeScene = scenes.find((s) => s.active);
+  const sceneCount = scenes.length;
 
   const stats = [
     {
-      title: "Active Scene",
-      value: activeScene?.name || "None",
-      description: "Current location",
+      title: 'Active Scene',
+      value: activeScene?.name || 'None',
+      description: 'Current location',
       icon: Shield,
     },
     {
-      title: "Total Scenes",
+      title: 'Total Scenes',
       value: String(sceneCount),
-      description: "Scenes available",
+      description: 'Scenes available',
       icon: Swords,
     },
     {
-      title: "Status",
-      value: "Connected",
+      title: 'Status',
+      value: 'Connected',
       description: config.relayUrl,
       icon: Activity,
     },
-  ]
+  ];
 
   return (
     <div className="space-y-6">
@@ -72,5 +74,5 @@ export default function PlayerDashboard() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

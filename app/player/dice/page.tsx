@@ -31,7 +31,7 @@ export default function PlayerDicePage() {
     queryFn: () => relay.getRolls(5),
   });
 
-  const recentRolls: any[] = (rollsData as any)?.data || [];
+  const recentRolls: unknown[] = ((rollsData as { data?: unknown })?.data as unknown[]) || [];
 
   function safeStr(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -41,22 +41,30 @@ export default function PlayerDicePage() {
   }
 
   const rollMutation = useMutation({
-    mutationFn: (formula: string) => relay.roll({ formula, createChatMessage: true }),
-    onSuccess: (data: any) => {
+    mutationFn: (formula: string) =>
+      relay.roll({ formula, createChatMessage: true }) as Promise<Record<string, unknown>>,
+    onSuccess: (data: Record<string, unknown>) => {
       queryClient.invalidateQueries({ queryKey: ['rolls'] });
       // POST /roll returns { type, requestId, success, data: { id, chatMessageCreated, roll: { formula, total, dice, ... } } }
-      const rollData = data?.data?.roll || data?.roll || data;
-      const total = rollData?.total ?? '?';
-      const expr = rollData?.formula ?? customFormula;
+      const rollData =
+        (data?.data as Record<string, unknown>)?.roll ||
+        (data?.roll as Record<string, unknown>) ||
+        data;
+      const rollRecord = (rollData as Record<string, unknown>) || {};
+      const total = rollRecord?.total ?? '?';
+      const expr = rollRecord?.formula ?? customFormula;
       setLastRoll({ formula: String(expr), total: typeof total === 'number' ? total : 0 });
       toast.success(`🎲 ${expr} → ${total}`);
     },
     onError: (err) => toast.error(String(err)),
   });
 
-  const doRoll = useCallback((formula: string) => {
-    rollMutation.mutate(formula);
-  }, [rollMutation]);
+  const doRoll = useCallback(
+    (formula: string) => {
+      rollMutation.mutate(formula);
+    },
+    [rollMutation],
+  );
 
   const handleCustomRoll = () => {
     const formula = customFormula.trim();
@@ -111,7 +119,10 @@ export default function PlayerDicePage() {
           placeholder="e.g. 1d20+5"
           className="font-mono"
         />
-        <Button onClick={handleCustomRoll} disabled={!customFormula.trim() || rollMutation.isPending}>
+        <Button
+          onClick={handleCustomRoll}
+          disabled={!customFormula.trim() || rollMutation.isPending}
+        >
           Roll
         </Button>
       </div>
@@ -122,19 +133,25 @@ export default function PlayerDicePage() {
         </CardHeader>
         <CardContent className="p-0">
           {recentRolls.length === 0 ? (
-            <div className="p-3 text-center text-sm text-muted-foreground">
-              No recent rolls
-            </div>
+            <div className="p-3 text-center text-sm text-muted-foreground">No recent rolls</div>
           ) : (
             <div className="divide-y">
-              {recentRolls.map((roll: any, i: number) => (
-                <div key={roll.id || i} className="flex items-center justify-between p-3 text-sm">
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {safeStr(roll.formula || roll.expression) || '—'}
-                  </span>
-                  <span className="font-bold font-mono">{roll.rollTotal ?? '?'}</span>
-                </div>
-              ))}
+              {recentRolls.map((roll, i: number) => {
+                const r = roll as {
+                  id?: string;
+                  formula?: string;
+                  expression?: string;
+                  rollTotal?: unknown;
+                };
+                return (
+                  <div key={r.id || i} className="flex items-center justify-between p-3 text-sm">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {safeStr(r.formula || r.expression) || '—'}
+                    </span>
+                    <span className="font-bold font-mono">{String(r.rollTotal ?? '')}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

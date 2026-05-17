@@ -3,19 +3,29 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
-function extractActors(data: any): Array<{ uuid: string; name: string; id: string; type?: string }> {
-  const list: Array<{ uuid: string; name: string; id: string; type?: string }> = [];
-  const folders: Record<string, any> = data?.data?.folders || {};
-  const entities: any[] = data?.data?.entities?.actors || [];
+interface ActorStub {
+  uuid: string;
+  name: string;
+  id: string;
+  type?: string;
+}
+
+function extractActors(data: Record<string, unknown> | undefined): ActorStub[] {
+  const list: ActorStub[] = [];
+  const dataBlock = data?.data as Record<string, unknown> | undefined;
+  const entities =
+    ((dataBlock?.entities as Record<string, unknown[]>)?.actors as ActorStub[]) || [];
+  const folders = (dataBlock?.folders as Record<string, Record<string, unknown>>) || {};
 
   for (const e of entities) list.push(e);
   for (const f of Object.values(folders)) {
-    if ((f as any)?.entities) {
-      for (const e of (f as any).entities) list.push(e);
+    const ents = f?.entities as ActorStub[] | undefined;
+    if (ents) {
+      for (const e of ents) list.push(e);
     }
   }
   return list;
@@ -29,7 +39,7 @@ export default function ActorsPage() {
     queryFn: () => relay.structure('Actor'),
   });
 
-  const actors = extractActors(data);
+  const actors = extractActors(data as Record<string, unknown> | undefined);
   const filtered = search
     ? actors.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
     : actors;
@@ -59,11 +69,7 @@ export default function ActorsPage() {
 
       <div className="space-y-2">
         {filtered.map((actor) => (
-          <Link
-            key={actor.id}
-            href={`/gm/actors/${actor.id}`}
-            className="block"
-          >
+          <Link key={actor.id} href={`/gm/actors/${actor.id}`} className="block">
             <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
               <CardContent className="p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -77,8 +83,18 @@ export default function ActorsPage() {
                     </Badge>
                   </div>
                 </div>
-                <svg className="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <svg
+                  className="w-4 h-4 text-muted-foreground"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </CardContent>
             </Card>

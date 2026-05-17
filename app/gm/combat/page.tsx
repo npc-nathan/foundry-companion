@@ -8,6 +8,31 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
+interface CombatantActor {
+  id?: string;
+  _id?: string;
+  name?: string;
+  system?: {
+    attributes?: { hp?: { value?: number; max?: number } };
+    hp?: { value?: number; max?: number };
+  };
+}
+
+interface Combatant {
+  id?: string;
+  name?: string;
+  initiative?: number;
+  actor?: CombatantActor;
+}
+
+interface Encounter {
+  id?: string;
+  name?: string;
+  round?: number;
+  current?: { combatantId?: string };
+  combatants?: Combatant[];
+}
+
 export default function CombatPage() {
   const queryClient = useQueryClient();
   const [combatDamage, setCombatDamage] = useState<Record<string, string>>({});
@@ -17,8 +42,9 @@ export default function CombatPage() {
     queryFn: () => relay.encounters(),
   });
 
-  const encounters: any[] = (data as any)?.encounters || [];
-  const activeEncounter = encounters.find((e: any) => e.current);
+  const encData = data as { encounters?: Encounter[] } | undefined;
+  const encounters: Encounter[] = encData?.encounters || [];
+  const activeEncounter = encounters.find((e) => e.current);
 
   const nextTurnMutation = useMutation({
     mutationFn: () => relay.nextTurn(activeEncounter?.id),
@@ -84,7 +110,11 @@ export default function CombatPage() {
   });
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><p className="text-muted-foreground">Loading combat tracker...</p></div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Loading combat tracker...</p>
+      </div>
+    );
   }
 
   if (!activeEncounter) {
@@ -101,7 +131,7 @@ export default function CombatPage() {
     );
   }
 
-  const combatants: any[] = activeEncounter.combatants || [];
+  const combatants: Combatant[] = activeEncounter.combatants || [];
 
   return (
     <div className="space-y-4">
@@ -112,24 +142,51 @@ export default function CombatPage() {
             {activeEncounter.name || 'Unnamed Encounter'} — Round {activeEncounter.round || 1}
           </p>
         </div>
-        <Badge variant="default" className="text-sm px-3 py-1">Round {activeEncounter.round || 1}</Badge>
+        <Badge variant="default" className="text-sm px-3 py-1">
+          Round {activeEncounter.round || 1}
+        </Badge>
       </div>
 
       {/* Combat Controls */}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => previousTurnMutation.mutate()} disabled={previousTurnMutation.isPending}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => previousTurnMutation.mutate()}
+          disabled={previousTurnMutation.isPending}
+        >
           ◀ Prev Turn
         </Button>
-        <Button variant="outline" size="sm" onClick={() => nextTurnMutation.mutate()} disabled={nextTurnMutation.isPending}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => nextTurnMutation.mutate()}
+          disabled={nextTurnMutation.isPending}
+        >
           Next Turn ▶
         </Button>
-        <Button variant="outline" size="sm" onClick={() => previousRoundMutation.mutate()} disabled={previousRoundMutation.isPending}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => previousRoundMutation.mutate()}
+          disabled={previousRoundMutation.isPending}
+        >
           ◀◀ Prev Round
         </Button>
-        <Button variant="outline" size="sm" onClick={() => nextRoundMutation.mutate()} disabled={nextRoundMutation.isPending}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => nextRoundMutation.mutate()}
+          disabled={nextRoundMutation.isPending}
+        >
           Next Round ▶▶
         </Button>
-        <Button variant="destructive" size="sm" onClick={() => endEncounterMutation.mutate()} disabled={endEncounterMutation.isPending}>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => endEncounterMutation.mutate()}
+          disabled={endEncounterMutation.isPending}
+        >
           End Encounter
         </Button>
       </div>
@@ -141,18 +198,20 @@ export default function CombatPage() {
         </CardHeader>
         <CardContent className="p-0">
           {combatants.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-sm">No combatants in this encounter</div>
+            <div className="p-4 text-center text-muted-foreground text-sm">
+              No combatants in this encounter
+            </div>
           ) : (
             <div className="divide-y">
-              {combatants.map((c: any, i: number) => {
-                const isActive = c.id === activeEncounter.current?.combatantId;
-                const actorId = c.actor?.id || c.actor?._id;
-                const isHpPending = hpDamageMutation.isPending || hpHealMutation.isPending;
-                const hpVal = c?.actor?.system?.attributes?.hp?.value ?? c?.actor?.system?.hp?.value;
-                const hpMax = c?.actor?.system?.attributes?.hp?.max ?? c?.actor?.system?.hp?.max;
-                const hpPct = hpMax > 0 ? Math.round((hpVal / hpMax) * 100) : 100;
+              {combatants.map((c, i) => {
+                const act = c.actor;
+                const actorId = act?.id || act?._id;
+                const hpVal = act?.system?.attributes?.hp?.value ?? act?.system?.hp?.value;
+                const hpMax = act?.system?.attributes?.hp?.max ?? act?.system?.hp?.max;
+                const hpPct = hpMax && hpMax > 0 ? Math.round(((hpVal || 0) / hpMax) * 100) : 100;
                 const dmgKey = c.id || `c-${i}`;
-                const dmgInput = combatDamage[dmgKey] ?? '';
+                const isActive = c.id === activeEncounter.current?.combatantId;
+                const isHpPending = hpDamageMutation.isPending || hpHealMutation.isPending;
 
                 const doDamage = (amount: number) => {
                   if (actorId) hpDamageMutation.mutate({ actorId, amount });
@@ -171,7 +230,9 @@ export default function CombatPage() {
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shrink-0" />
                       )}
                       <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{c.name || c.actor?.name || 'Unknown'}</div>
+                        <div className="font-medium text-sm truncate">
+                          {c.name || act?.name || 'Unknown'}
+                        </div>
                         {typeof hpVal === 'number' && (
                           <div className="flex items-center gap-2 mt-1">
                             <div className="h-1.5 w-16 bg-muted rounded-full overflow-hidden">
@@ -180,31 +241,87 @@ export default function CombatPage() {
                                 style={{ width: `${Math.max(hpPct, 0)}%` }}
                               />
                             </div>
-                            <span className="text-xs text-muted-foreground">{hpVal}/{hpMax}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {hpVal}/{hpMax}
+                            </span>
                           </div>
                         )}
                         {/* Inline damage/heal controls */}
                         {actorId && (
                           <div className="flex items-center gap-1 mt-1.5">
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs" disabled={isHpPending}
-                              onClick={() => doDamage(1)}>-1</Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs" disabled={isHpPending}
-                              onClick={() => doDamage(5)}>-5</Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs" disabled={isHpPending}
-                              onClick={() => doDamage(10)}>-10</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-xs"
+                              disabled={isHpPending}
+                              onClick={() => doDamage(1)}
+                            >
+                              -1
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-xs"
+                              disabled={isHpPending}
+                              onClick={() => doDamage(5)}
+                            >
+                              -5
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-xs"
+                              disabled={isHpPending}
+                              onClick={() => doDamage(10)}
+                            >
+                              -10
+                            </Button>
                             <input
                               type="number"
-                              value={dmgInput}
-                              onChange={(e) => setCombatDamage(prev => ({ ...prev, [dmgKey]: e.target.value }))}
+                              // eslint-disable-next-line security/detect-object-injection -- dmgKey is derived from c.id, a controlled value
+                              value={dmgKey ? (combatDamage[dmgKey] ?? '') : ''}
+                              onChange={(e) =>
+                                setCombatDamage((prev) => ({
+                                  ...prev,
+                                  [dmgKey || `c-${i}`]: e.target.value,
+                                }))
+                              }
                               placeholder="dmg"
                               className="w-12 h-6 px-1 rounded border bg-background text-[10px]"
                             />
-                            <Button size="sm" variant="ghost" className="h-6 w-8 p-0 text-[10px] text-red-400" disabled={!dmgInput || isHpPending}
-                              onClick={() => { doDamage(Number(dmgInput)); setCombatDamage(prev => ({ ...prev, [dmgKey]: '' })); }}>DMG</Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-7 p-0 text-xs text-green-400" disabled={isHpPending}
-                              onClick={() => doHeal(1)}>+1</Button>
-                            <Button size="sm" variant="ghost" className="h-6 w-7 p-0 text-xs text-green-400" disabled={isHpPending}
-                              onClick={() => doHeal(5)}>+5</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-8 p-0 text-[10px] text-red-400"
+                              // eslint-disable-next-line security/detect-object-injection -- dmgKey is derived from c.id
+                              disabled={!dmgKey || !(combatDamage[dmgKey] ?? '') || isHpPending}
+                              onClick={() => {
+                                const val = combatDamage[dmgKey || `c-${i}`];
+                                if (val) doDamage(Number(val));
+                                const key = dmgKey || `c-${i}`;
+                                setCombatDamage((prev) => ({ ...prev, [key]: '' }));
+                              }}
+                            >
+                              DMG
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-7 p-0 text-xs text-green-400"
+                              disabled={isHpPending}
+                              onClick={() => doHeal(1)}
+                            >
+                              +1
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-7 p-0 text-xs text-green-400"
+                              disabled={isHpPending}
+                              onClick={() => doHeal(5)}
+                            >
+                              +5
+                            </Button>
                           </div>
                         )}
                       </div>

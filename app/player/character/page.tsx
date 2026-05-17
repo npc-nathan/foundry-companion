@@ -1,53 +1,57 @@
-"use client"
+'use client';
 
-import { useState, useCallback } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { relay } from "@/lib/relay"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Crosshair } from "lucide-react"
+import { useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { relay } from '@/lib/relay';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import CharacterSheet from "@/components/CharacterSheet"
+} from '@/components/ui/select';
+import CharacterSheet from '@/components/CharacterSheet';
 
-type ActorStub = { name: string; id: string; type?: string }
+type ActorStub = { name: string; id: string; type?: string };
 
-function extractActors(data: any): ActorStub[] {
-  const list: ActorStub[] = []
-  const folders: Record<string, any> = data?.data?.folders || {}
-  const entities: any[] = data?.data?.entities?.actors || []
-  for (const e of entities) list.push({ name: e.name, id: e.id, type: e.type })
+function extractActors(data: Record<string, unknown>): ActorStub[] {
+  const list: ActorStub[] = [];
+  const dataBlock = data?.data as Record<string, unknown> | undefined;
+  const folders = (dataBlock?.folders as Record<string, unknown>) || {};
+  const entities = (dataBlock?.entities as Record<string, unknown>) || {};
+  const actorEntities = (entities?.actors as unknown[]) || [];
+  for (const e of actorEntities) {
+    const ent = e as { name: string; id: string; type?: string };
+    list.push({ name: ent.name, id: ent.id, type: ent.type });
+  }
   for (const f of Object.values(folders)) {
-    if ((f as any)?.entities) {
-      for (const e of (f as any).entities)
-        list.push({ name: e.name, id: e.id, type: e.type })
+    const folder = f as { entities?: unknown[] };
+    if (folder?.entities) {
+      for (const e of folder.entities) {
+        const ent = e as { name: string; id: string; type?: string };
+        list.push({ name: ent.name, id: ent.id, type: ent.type });
+      }
     }
   }
-  return list
+  return list;
 }
 
 export default function PlayerCharacterPage() {
-  const [selectedId, setSelectedId] = useState<string>("")
+  const [selectedId, setSelectedId] = useState<string>('');
 
   const { data: structure } = useQuery({
-    queryKey: ["structure", "Actor"],
-    queryFn: () => relay.structure("Actor"),
-  })
+    queryKey: ['structure', 'Actor'],
+    queryFn: () => relay.structure('Actor'),
+  });
 
-  const actors = extractActors(structure)
-  const characterActors = actors.filter(
-    (a) => a.type === "character" || a.type === "pc"
-  )
-  const selectable = characterActors.length > 0 ? characterActors : actors
-  const uuid = selectedId ? `Actor.${selectedId}` : ""
+  const actors = extractActors(structure as Record<string, unknown>);
+  const characterActors = actors.filter((a) => a.type === 'character' || a.type === 'pc');
+  const selectable = characterActors.length > 0 ? characterActors : actors;
+  const uuid = selectedId ? `Actor.${selectedId}` : '';
 
   const handleSelect = useCallback((val: string) => {
-    setSelectedId(val)
-  }, [])
+    setSelectedId(val);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -77,5 +81,5 @@ export default function PlayerCharacterPage() {
 
       <CharacterSheet uuid={uuid} />
     </div>
-  )
+  );
 }

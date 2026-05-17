@@ -16,14 +16,47 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import {
-  Dice1, Dice2, Dice3, Dice4, Dice5, Dice6,
-  Skull, Zap, Sword, Wand, Heart,
+  Dice1,
+  Dice2,
+  Dice3,
+  Dice4,
+  Dice5,
+  Dice6,
+  Skull,
+  Zap,
+  Sword,
+  Wand,
+  Heart,
 } from 'lucide-react';
 
 interface ActorStub {
   uuid: string;
   name: string;
   type?: string;
+}
+
+interface RollStub {
+  id?: string;
+  formula?: string;
+  expression?: string;
+  rollTotal?: number;
+  total?: number;
+  dice?: unknown;
+  speaker?: string | { alias?: string; actor?: string; token?: string };
+}
+
+interface RollResult {
+  data?: {
+    data?: {
+      roll?: { formula?: string; total?: number };
+      id?: string;
+      chatMessageCreated?: boolean;
+    };
+    roll?: { formula?: string; total?: number };
+  };
+  roll?: { formula?: string; total?: number };
+  formula?: string;
+  total?: number;
 }
 
 const DICE_PRESETS = [
@@ -77,16 +110,25 @@ const SKILLS = [
   { value: 'int', label: 'Intimidation' },
 ];
 
-function extractActors(data: any): ActorStub[] {
-  const list: ActorStub[] = [];
-  const entities: any[] = data?.data?.entities?.actors || [];
-  const folders: Record<string, any> = data?.data?.folders || {};
+interface ActorEntity {
+  uuid?: string;
+  name?: string;
+  type?: string;
+}
 
-  for (const e of entities) list.push({ uuid: e.uuid, name: e.name, type: e.type });
+function extractActors(data: Record<string, unknown> | undefined): ActorStub[] {
+  const list: ActorStub[] = [];
+  const dataBlock = data?.data as Record<string, unknown> | undefined;
+  const entities = ((dataBlock?.entities as Record<string, ActorEntity[]>)?.actors ||
+    []) as ActorEntity[];
+  const folders = (dataBlock?.folders as Record<string, Record<string, unknown>>) || {};
+
+  for (const e of entities) list.push({ uuid: e.uuid || '', name: e.name || '', type: e.type });
   for (const f of Object.values(folders)) {
-    if ((f as any)?.entities) {
-      for (const e of (f as any).entities) {
-        list.push({ uuid: e.uuid, name: e.name, type: e.type });
+    const ents = f?.entities as ActorEntity[] | undefined;
+    if (ents) {
+      for (const e of ents) {
+        list.push({ uuid: e.uuid || '', name: e.name || '', type: e.type });
       }
     }
   }
@@ -109,8 +151,8 @@ export default function GMDicePage() {
     queryFn: () => relay.getRolls(10),
   });
 
-  const actors = extractActors(actorsData);
-  const recentRolls: any[] = (rollsData as any)?.data || [];
+  const actors = extractActors(actorsData as Record<string, unknown> | undefined);
+  const recentRolls: RollStub[] = (rollsData as { data?: RollStub[] })?.data || [];
 
   function safeStr(v: unknown): string {
     if (v === null || v === undefined) return '';
@@ -120,8 +162,9 @@ export default function GMDicePage() {
   }
 
   const rollMutation = useMutation({
-    mutationFn: (formula: string) => relay.roll({ formula, createChatMessage: true }),
-    onSuccess: (data: any) => {
+    mutationFn: (formula: string) =>
+      relay.roll({ formula, createChatMessage: true }) as Promise<RollResult>,
+    onSuccess: (data: RollResult) => {
       queryClient.invalidateQueries({ queryKey: ['rolls'] });
       // POST /roll returns { type, requestId, success, data: { id, chatMessageCreated, roll: { formula, total, dice, ... } } }
       const rollData = data?.data?.roll || data?.roll || data;
@@ -133,13 +176,15 @@ export default function GMDicePage() {
     onError: (err) => toast.error(String(err)),
   });
 
-  const doRoll = useCallback((formula: string) => {
-    rollMutation.mutate(formula);
-  }, [rollMutation]);
+  const doRoll = useCallback(
+    (formula: string) => {
+      rollMutation.mutate(formula);
+    },
+    [rollMutation],
+  );
 
   const deathSaveMutation = useMutation({
-    mutationFn: (actorUuid: string) =>
-      relay.dndDeathSave({ actorUuid, createChatMessage: true }),
+    mutationFn: (actorUuid: string) => relay.dndDeathSave({ actorUuid, createChatMessage: true }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rolls'] });
       toast.success('Death save rolled!');
@@ -195,6 +240,15 @@ export default function GMDicePage() {
     doRoll(formula);
     setCustomFormula('');
   };
+
+  function getSpeakerLabel(speaker: unknown): string {
+    if (typeof speaker === 'string') return speaker;
+    if (speaker && typeof speaker === 'object') {
+      const s = speaker as Record<string, unknown>;
+      return safeStr(s.alias) || safeStr(s.actor) || safeStr(s.token);
+    }
+    return '';
+  }
 
   return (
     <div className="space-y-6">
@@ -421,37 +475,42 @@ export default function GMDicePage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y">
-              {recentRolls.slice(0, 10).map((roll: any, i: number) => (
-                <div key={roll.id || i} className="flex items-center justify-between p-3 text-sm">
-                  <div>
-                    <span className="font-mono text-muted-foreground">
-                      {roll.formula || roll.expression || '—'}
-                    </span>
-                    {(() => {
-                      const speakerLabel = safeStr(roll.speaker && typeof roll.speaker === 'object' ? (roll.speaker as any).alias || (roll.speaker as any).actor || (roll.speaker as any).token || '' : roll.speaker);
-                      return speakerLabel ? (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          by {speakerLabel}
-                        </span>
-                      ) : null;
-                    })()}
+              {recentRolls.slice(0, 10).map((roll, i: number) => {
+                const rollId = (roll as Record<string, unknown>).id as string | undefined;
+                return (
+                  <div key={rollId || i} className="flex items-center justify-between p-3 text-sm">
+                    <div>
+                      <span className="font-mono text-muted-foreground">
+                        {roll.formula || roll.expression || '—'}
+                      </span>
+                      {(() => {
+                        const speakerLabel = getSpeakerLabel(roll.speaker);
+                        return speakerLabel ? (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            by {speakerLabel}
+                          </span>
+                        ) : null;
+                      })()}
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold font-mono">{roll.rollTotal ?? '?'}</span>
+                      {!!roll.dice && (
+                        <div className="text-[10px] text-muted-foreground">
+                          {Array.isArray(roll.dice)
+                            ? (roll.dice as Array<{ results?: Array<{ result?: unknown }> }>)
+                                .map((d) => {
+                                  if (typeof d !== 'object') return safeStr(d);
+                                  const results = d.results || [];
+                                  return results.map((r) => r.result ?? r).join(', ');
+                                })
+                                .join(', ')
+                            : safeStr(roll.dice)}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold font-mono">{roll.rollTotal ?? '?'}</span>
-                    {roll.dice && (
-                      <div className="text-[10px] text-muted-foreground">
-                        {Array.isArray(roll.dice)
-                          ? (roll.dice as any[]).map((d: any) => {
-                              if (typeof d !== 'object') return safeStr(d);
-                              const results = d.results || [];
-                              return results.map((r: any) => r.result ?? r).join(', ');
-                            }).join(', ')
-                          : safeStr(roll.dice)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

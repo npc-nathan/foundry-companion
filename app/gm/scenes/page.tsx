@@ -7,7 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-function getThumbnailUrl(scene: any): string | null {
+interface SceneStub {
+  id?: string;
+  _id?: string;
+  name?: string;
+  active?: boolean;
+  thumb?: string;
+  img?: string;
+  background?: { src?: string };
+}
+
+function getThumbnailUrl(scene: SceneStub): string | null {
   // Priority: scene.thumb (explicit thumbnail), then background.src, then img
   const img = scene?.thumb || scene?.background?.src || scene?.img;
   if (!img || typeof img !== 'string') {
@@ -26,34 +36,33 @@ export default function GMScenesPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['structure', 'Scene'],
-    queryFn: () => relay.structure('Scene', 'true') as any,
+    queryFn: () => relay.structure('Scene', 'true') as Promise<unknown>,
   });
 
   const activateMutation = useMutation({
-    mutationFn: (sceneId: string) =>
-      relay.activateScene({ sceneId }),
+    mutationFn: (sceneId: string) => relay.activateScene({ sceneId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['structure', 'Scene'] });
       toast.success('Scene activated');
     },
-    onError: (err: any) => toast.error(`Failed to activate: ${String(err)}`),
+    onError: (err: unknown) => toast.error(`Failed to activate: ${String(err)}`),
   });
 
   const handleActivate = useCallback(
     (sceneId: string) => {
       activateMutation.mutate(sceneId);
     },
-    [activateMutation]
+    [activateMutation],
   );
 
-  const sceneEntries: any[] = (() => {
-    const raw = data as any;
+  const sceneEntries: SceneStub[] = (() => {
+    const raw = data as { data?: { entities?: { scenes?: SceneStub[] } } } | undefined;
     // The structure endpoint returns { type, data: { entities: { scenes: [...] } } }
     if (raw?.data?.entities?.scenes && Array.isArray(raw.data.entities.scenes)) {
       return raw.data.entities.scenes;
     }
     // Fallback: flat array or data.data as array
-    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.data)) return raw.data as SceneStub[];
     if (Array.isArray(raw)) return raw;
     return [];
   })();
@@ -90,7 +99,7 @@ export default function GMScenesPage() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sceneEntries.map((scene: any) => {
+        {sceneEntries.map((scene) => {
           const sceneId = scene.id || scene._id;
           const thumb = getThumbnailUrl(scene);
           const isActive = scene.active === true;

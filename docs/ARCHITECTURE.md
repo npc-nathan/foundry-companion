@@ -110,11 +110,11 @@ Root Layout (app/layout.tsx)
 
 ### Three-Layer Architecture
 
-| Layer | Technology | Persistence | Purpose |
-|-------|-----------|-------------|---------|
-| **Config** | Zustand + `persist` middleware | localStorage | Relay URL, API key, role, theme |
-| **Connection** | Zustand (runtime) | In-memory | Connected/connecting/error status |
-| **Server Data** | TanStack React Query | In-memory (cached) | Actors, scenes, combat, chat, etc. |
+| Layer           | Technology                     | Persistence        | Purpose                            |
+| --------------- | ------------------------------ | ------------------ | ---------------------------------- |
+| **Config**      | Zustand + `persist` middleware | localStorage       | Relay URL, API key, role, theme    |
+| **Connection**  | Zustand (runtime)              | In-memory          | Connected/connecting/error status  |
+| **Server Data** | TanStack React Query           | In-memory (cached) | Actors, scenes, combat, chat, etc. |
 
 ### Zustand Store (`lib/store.ts`)
 
@@ -140,6 +140,7 @@ Status (runtime):
 ### React Query Configuration
 
 Most queries use:
+
 - `refetchInterval`: 3-30s depending on data volatility
 - `staleTime`: Matches or exceeds refetch interval
 - `gcTime`: 5 minutes default
@@ -193,6 +194,7 @@ The file `app/api/relay/[...path]/route.ts` is a **catch-all route** that:
 ## Key Design Decisions
 
 ### Why SSE over WebSocket?
+
 - Simpler protocol (HTTP-based, no upgrade handshake)
 - Works through the proxy without additional infrastructure
 - Supports auth headers via `fetch()` API
@@ -200,12 +202,14 @@ The file `app/api/relay/[...path]/route.ts` is a **catch-all route** that:
 - Auto-reconnect built in with exponential backoff
 
 ### Why Zustand + React Query instead of Redux?
+
 - Zustand: Minimal boilerplate for config/connection state
 - React Query: Automatic caching, deduplication, refetching for server data
 - Separation of concerns: local state ≠ server state
 - No need for selectors, reducers, or middleware
 
 ### Why CodeMirror 6?
+
 - Modular architecture (only import needed features)
 - Better performance than CodeMirror 5
 - JS/TS syntax highlighting built in
@@ -213,6 +217,7 @@ The file `app/api/relay/[...path]/route.ts` is a **catch-all route** that:
 - Active community and maintenance
 
 ### Why React Flow (@xyflow/react v12)?
+
 - Purpose-built for node-based editors
 - Built-in drag & drop, connection handling
 - Custom node types, edge types, and controls

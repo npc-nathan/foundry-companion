@@ -7,22 +7,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
-function flattenActorCount(structureResp: any): number {
-  const data = structureResp?.data || {};
-  const folders: Record<string, any> = data?.folders || {};
-  const entities: any[] = data?.entities?.actors || [];
+interface EncounterStub {
+  name?: string;
+  id?: string;
+  round?: number;
+  active?: boolean;
+}
+
+function flattenActorCount(structureResp: Record<string, unknown> | undefined): number {
+  const data = (structureResp?.data as Record<string, unknown>) || {};
+  const folders = (data?.folders as Record<string, Record<string, unknown>>) || {};
+  const entities = (data?.entities as Record<string, unknown[]>)?.actors || [];
   let count = entities.length;
   for (const f of Object.values(folders)) {
-    const ents = (f as any)?.entities;
+    const ents = f?.entities as Record<string, unknown>[] | undefined;
     if (ents) count += ents.length;
   }
   return count;
 }
 
-function findSceneCount(structureResp: any): number {
-  const data = structureResp?.data || {};
+function findSceneCount(structureResp: Record<string, unknown> | undefined): number {
+  const data = (structureResp?.data as Record<string, unknown>) || {};
   // Scenes live at root-level data.entities.scenes[], not in folders
-  const rootScenes: any[] = data?.entities?.scenes || [];
+  const rootScenes = (data?.entities as Record<string, unknown[]>)?.scenes || [];
   return rootScenes.length;
 }
 
@@ -51,18 +58,18 @@ export default function GMDashboard() {
     refetchInterval: 60000,
   });
 
-  const actorCount = structure ? flattenActorCount(structure) : '?';
-  const sceneCount = structure ? findSceneCount(structure) : '?';
-  const activeEncounters = (encounters as any)?.encounters?.length || 0;
-  const playerCount = (session as any)?.activeSessions?.length || '—';
+  const actorCount = structure ? flattenActorCount(structure as Record<string, unknown>) : '?';
+  const sceneCount = structure ? findSceneCount(structure as Record<string, unknown>) : '?';
+  const encData = encounters as { encounters?: EncounterStub[] } | undefined;
+  const sessData = session as { activeSessions?: unknown[] } | undefined;
+  const activeEncounters = encData?.encounters?.length || 0;
+  const playerCount = sessData?.activeSessions?.length || '—';
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">GM Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Connected to {config.relayUrl}
-        </p>
+        <p className="text-muted-foreground text-sm mt-1">Connected to {config.relayUrl}</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -117,7 +124,9 @@ export default function GMDashboard() {
             className="block p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
           >
             <div className="font-medium">Actors</div>
-            <div className="text-xs text-muted-foreground mt-1">Search, damage, heal, conditions</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Search, damage, heal, conditions
+            </div>
           </Link>
           <Link
             href="/gm/combat"
@@ -138,14 +147,16 @@ export default function GMDashboard() {
 
       <div>
         <h2 className="text-lg font-semibold mb-3">Active Encounters</h2>
-        {(encounters as any)?.encounters?.length > 0 ? (
+        {encData?.encounters && encData.encounters.length > 0 ? (
           <Card>
             <CardContent className="p-0 divide-y">
-              {(encounters as any).encounters.map((e: any, i: number) => (
+              {encData.encounters.map((e: EncounterStub, i: number) => (
                 <div key={i} className="flex items-center justify-between p-3">
                   <div>
                     <span className="font-medium">{e.name || e.id}</span>
-                    <Badge variant="outline" className="ml-2 text-xs">Round {e.round || 1}</Badge>
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      Round {e.round || 1}
+                    </Badge>
                   </div>
                   <Badge variant={e.active ? 'default' : 'secondary'}>
                     {e.active ? 'Active' : 'Pending'}

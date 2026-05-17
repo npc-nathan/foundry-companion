@@ -1,34 +1,51 @@
-'use client'
+'use client';
 
-import { useEffect, useRef, useState } from 'react'
-import { EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, rectangularSelection, crosshairCursor } from '@codemirror/view'
-import { EditorState, Compartment } from '@codemirror/state'
-import { javascript } from '@codemirror/lang-javascript'
-import { oneDark } from '@codemirror/theme-one-dark'
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter, indentOnInput } from '@codemirror/language'
-import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
-import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { useEffect, useRef } from 'react';
+import {
+  EditorView,
+  keymap,
+  lineNumbers,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  drawSelection,
+  rectangularSelection,
+  crosshairCursor,
+} from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
+import { javascript } from '@codemirror/lang-javascript';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import {
+  syntaxHighlighting,
+  defaultHighlightStyle,
+  bracketMatching,
+  foldGutter,
+  indentOnInput,
+} from '@codemirror/language';
+import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 
 interface Props {
-  value: string
-  onChange: (value: string) => void
+  value: string;
+  onChange: (value: string) => void;
 }
 
 export default function CodeMirrorEditor({ value, onChange }: Props) {
-  const editorRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView | null>(null)
-  const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
+  const editorRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
-    if (!editorRef.current) return
+    if (!editorRef.current) return;
 
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
-        onChangeRef.current(update.state.doc.toString())
+        onChangeRef.current(update.state.doc.toString());
       }
-    })
+    });
 
     const state = EditorState.create({
       doc: value,
@@ -59,34 +76,34 @@ export default function CodeMirrorEditor({ value, onChange }: Props) {
         updateListener,
         EditorView.lineWrapping,
       ],
-    })
+    });
 
     const view = new EditorView({
       state,
       parent: editorRef.current,
-    })
+    });
 
-    viewRef.current = view
+    viewRef.current = view;
 
     return () => {
-      view.destroy()
-      viewRef.current = null
-    }
-  }, []) // mount once
+      view.destroy();
+      viewRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync external value changes (e.g. switching macros) without losing cursor position
   useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    const current = view.state.doc.toString()
+    const view = viewRef.current;
+    if (!view) return;
+    const current = view.state.doc.toString();
     if (current !== value) {
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },
-      })
+      });
     }
-  }, [value])
+  }, [value, viewRef]);
 
-  return <div ref={editorRef} className="h-full w-full overflow-hidden" />
+  return <div ref={editorRef} className="h-full w-full overflow-hidden" />;
 }
 
 // Simple selection highlighter (replaces deprecated one)
@@ -95,5 +112,5 @@ function editorSelectionHighlighter() {
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
       backgroundColor: '#3a3f4b !important',
     },
-  })
+  });
 }

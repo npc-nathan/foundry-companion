@@ -56,3 +56,4 @@ debug_ac2.js
 *.bak
 *.swp
 *.swo
+.eslint-baseline.json

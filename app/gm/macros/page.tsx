@@ -1,198 +1,222 @@
-'use client'
+'use client';
 
-import { useState, useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { relay } from '@/lib/relay'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { toast } from 'sonner'
-import { Plus, Play, Save, Trash2, Search, Code2, GitBranch, Terminal } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { useState, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { relay } from '@/lib/relay';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import { Plus, Play, Save, Trash2, Search, Code2, GitBranch, Terminal } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 // ─── CodeMirror dynamic import ──────────────────────────────
-import dynamic from 'next/dynamic'
+import dynamic from 'next/dynamic';
 
-const CodeEditor = dynamic(
-  () => import('@/components/macros/code-editor'),
-  { ssr: false, loading: () => <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Loading editor...</div> }
-)
+const CodeEditor = dynamic(() => import('@/components/macros/code-editor'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+      Loading editor...
+    </div>
+  ),
+});
 
-const NodeEditor = dynamic(
-  () => import('@/components/macros/node-editor'),
-  { ssr: false, loading: () => <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Loading node editor...</div> }
-)
+const NodeEditor = dynamic(() => import('@/components/macros/node-editor'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+      Loading node editor...
+    </div>
+  ),
+});
 
 // ─── Types ──────────────────────────────────────────────────
 interface Macro {
-  _id: string
-  name: string
-  type: string
-  scope: string
-  command: string
-  img?: string
-  folder?: string
-  flags?: Record<string, unknown>
+  _id: string;
+  name: string;
+  type: string;
+  scope: string;
+  command: string;
+  img?: string;
+  folder?: string;
+  flags?: Record<string, unknown>;
 }
 
-type Tab = 'code' | 'nodes'
+type Tab = 'code' | 'nodes';
 
 export default function GMMacrosPage() {
-  const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<Tab>('code')
-  const [search, setSearch] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editType, setEditType] = useState('script')
-  const [editScope, setEditScope] = useState('global')
-  const [editCommand, setEditCommand] = useState('')
-  const [isNew, setIsNew] = useState(false)
-  const [nodeGraph, setNodeGraph] = useState<{ nodes: unknown[]; edges: unknown[] } | null>(null)
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<Tab>('code');
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editType, setEditType] = useState('script');
+  const [editScope, setEditScope] = useState('global');
+  const [editCommand, setEditCommand] = useState('');
+  const [isNew, setIsNew] = useState(false);
+  const [nodeGraph, setNodeGraph] = useState<{ nodes: unknown[]; edges: unknown[] } | null>(null);
 
-
-    const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['macros'],
     queryFn: () => relay.getMacros(),
-  })
+  });
 
-  const rawMacros: unknown[] = data && 'macros' in data
-    ? (data as unknown as { macros: unknown[] }).macros
-    : data && 'data' in data
-      ? (data as unknown as { data: unknown[] }).data
-      : Array.isArray(data) ? data : []
+  const rawMacros: unknown[] =
+    data && 'macros' in data
+      ? (data as unknown as { macros: unknown[] }).macros
+      : data && 'data' in data
+        ? (data as unknown as { data: unknown[] }).data
+        : Array.isArray(data)
+          ? data
+          : [];
   const macros: Macro[] = rawMacros.map((m) => {
-    const macro = m as Record<string, unknown>
+    const macro = m as Record<string, unknown>;
     return {
-    _id: (macro.uuid as string) || (macro._id as string) || '',
-    name: (macro.name as string) || '',
-    type: (macro.type as string) || 'script',
-    scope: (macro.scope as string) || 'global',
-    command: (macro.command as string) || '',
-    img: macro.img as string | undefined,
-    folder: macro.folder as string | undefined,
-    flags: macro.flags as Record<string, unknown> | undefined,
-  }})
+      _id: (macro.uuid as string) || (macro._id as string) || '',
+      name: (macro.name as string) || '',
+      type: (macro.type as string) || 'script',
+      scope: (macro.scope as string) || 'global',
+      command: (macro.command as string) || '',
+      img: macro.img as string | undefined,
+      folder: macro.folder as string | undefined,
+      flags: macro.flags as Record<string, unknown> | undefined,
+    };
+  });
 
-  const filteredMacros = macros.filter((m) =>
-    m.name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredMacros = macros.filter((m) => m.name?.toLowerCase().includes(search.toLowerCase()));
 
-  const selectedMacro = macros.find((m) => m._id === selectedId)
+  const selectedMacro = macros.find((m) => m._id === selectedId);
 
   // ─── Mutations ──────────────────────────────────────────
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       // Get latest exported code from node editor
-      let code = editCommand
-      const exportFn = (window as any).__nodeEditor_export
+      let code = editCommand;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-component via window
+      const exportFn = (window as any).__nodeEditor_export;
       if (typeof exportFn === 'function') {
-        const exported = exportFn()
-        if (exported) code = exported
+        const exported = exportFn();
+        if (exported) code = exported;
       }
-      const command = code
+      const command = code;
       if (isNew) {
-        return relay.createMacro({ name: editName, type: editType, scope: editScope, command })
+        return relay.createMacro({ name: editName, type: editType, scope: editScope, command });
       }
-      if (!selectedId) return
-      return relay.updateMacro(selectedId, { name: editName, type: editType, scope: editScope, command })
+      if (!selectedId) return;
+      return relay.updateMacro(selectedId, {
+        name: editName,
+        type: editType,
+        scope: editScope,
+        command,
+      });
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['macros'] })
+      queryClient.invalidateQueries({ queryKey: ['macros'] });
       // After creating, set the returned UUID as selected
       if (isNew && data) {
-        const result = data as any
-        const newId = result.uuid || result._id || result.id || ''
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape varies
+        const result = data as any;
+        const newId = result.uuid || result._id || result.id || '';
         if (newId) {
-          setSelectedId(newId)
-          setIsNew(false)
+          setSelectedId(newId);
+          setIsNew(false);
         }
       } else {
-        setIsNew(false)
+        setIsNew(false);
       }
-      toast.success(isNew ? 'Macro created' : 'Macro saved')
+      toast.success(isNew ? 'Macro created' : 'Macro saved');
     },
     onError: () => toast.error('Failed to save macro'),
-  })
+  });
 
   const deleteMutation = useMutation({
     mutationFn: () => {
-      if (!selectedId) throw new Error('No macro selected')
-      return relay.deleteMacro(selectedId)
+      if (!selectedId) throw new Error('No macro selected');
+      return relay.deleteMacro(selectedId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['macros'] })
-      setSelectedId(null)
-      setEditCommand('')
-      setEditName('')
-      setIsNew(false)
-      toast.success('Macro deleted')
+      queryClient.invalidateQueries({ queryKey: ['macros'] });
+      setSelectedId(null);
+      setEditCommand('');
+      setEditName('');
+      setIsNew(false);
+      toast.success('Macro deleted');
     },
     onError: () => toast.error('Failed to delete macro'),
-  })
+  });
 
   const runMutation = useMutation({
     mutationFn: () => {
-      if (!selectedId) throw new Error('No macro selected')
-      return relay.executeMacro(selectedId)
+      if (!selectedId) throw new Error('No macro selected');
+      return relay.executeMacro(selectedId);
     },
     onSuccess: () => toast.success('Macro executed'),
     onError: () => toast.error('Failed to execute macro'),
-  })
+  });
+
+  // ─── Node graph helpers ─────────────────────────────────
+
+  function decodeCommand(command: string): {
+    code: string;
+    nodeGraph: { nodes: unknown[]; edges: unknown[] } | null;
+  } {
+    const match = command.match(
+      // eslint-disable-next-line security/detect-unsafe-regex -- controlled pattern matching internal sentinel comments, not user regex
+      /\/\/ __NODE_GRAPH_V2__\n\/\/ (.*)\n\/\/ __END_NODE_GRAPH__\n?([\s\S]*)?/,
+    );
+    if (!match) return { code: command, nodeGraph: null };
+    try {
+      return { code: (match[2] || '').trim(), nodeGraph: JSON.parse(match[1]) };
+    } catch {
+      return { code: command, nodeGraph: null };
+    }
+  }
 
   // ─── Helpers ────────────────────────────────────────────
 
   const selectMacro = useCallback((m: Macro) => {
-    setSelectedId(m._id)
-    setEditName(m.name)
-    setEditType(m.type || 'script')
-    setEditScope(m.scope || 'global')
-    const { code, nodeGraph } = decodeCommand(m.command || '')
-    setEditCommand(code)
-    setNodeGraph(nodeGraph)
-    setIsNew(false)
-  }, [])
+    setSelectedId(m._id);
+    setEditName(m.name);
+    setEditType(m.type || 'script');
+    setEditScope(m.scope || 'global');
+    const { code, nodeGraph } = decodeCommand(m.command || '');
+    setEditCommand(code);
+    setNodeGraph(nodeGraph);
+    setIsNew(false);
+  }, []);
 
   const newMacro = useCallback(() => {
-    setSelectedId('__new__')
-    setEditName('Untitled Macro')
-    setEditType('script')
-    setEditScope('global')
-    setEditCommand('// New macro\n')
-    setNodeGraph(null)
-    setIsNew(true)
-  }, [])
+    setSelectedId('__new__');
+    setEditName('Untitled Macro');
+    setEditType('script');
+    setEditScope('global');
+    setEditCommand('// New macro\n');
+    setNodeGraph(null);
+    setIsNew(true);
+  }, []);
 
   // Sync command when CodeMirror changes
   const onCommandChange = useCallback((val: string) => {
-    setEditCommand(val)
-  }, [])
+    setEditCommand(val);
+  }, []);
 
   const onFieldChange = useCallback((field: string, val: string) => {
-    if (field === 'name') setEditName(val)
-    if (field === 'type') setEditType(val)
-    if (field === 'scope') setEditScope(val)
-  }, [])
+    if (field === 'name') setEditName(val);
+    if (field === 'type') setEditType(val);
+    if (field === 'scope') setEditScope(val);
+  }, []);
 
   const onNodeGraphChange = useCallback((nodes: unknown[], edges: unknown[]) => {
-    setNodeGraph({ nodes, edges })
-  }, [])
-
-  // ─── Node graph helpers ─────────────────────────────────
-  function encodeCommand(code: string, nodes: unknown[], edges: unknown[]): string {
-    if (nodes.length === 0) return code
-    return `// __NODE_GRAPH_V2__\n// ${JSON.stringify({ nodes, edges })}\n// __END_NODE_GRAPH__\n${code}`
-  }
-
-  function decodeCommand(command: string): { code: string; nodeGraph: { nodes: unknown[]; edges: unknown[] } | null } {
-    const match = command.match(/\/\/ __NODE_GRAPH_V2__\n\/\/ (.*)\n\/\/ __END_NODE_GRAPH__\n?([\s\S]*)?/)
-    if (!match) return { code: command, nodeGraph: null }
-    try {
-      return { code: (match[2] || '').trim(), nodeGraph: JSON.parse(match[1]) }
-    } catch {
-      return { code: command, nodeGraph: null }
-    }
-  }
+    setNodeGraph({ nodes, edges });
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────
 
@@ -204,7 +228,9 @@ export default function GMMacrosPage() {
           onClick={() => setActiveTab('code')}
           className={cn(
             'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-            activeTab === 'code' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+            activeTab === 'code'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
           )}
         >
           <Code2 className="h-4 w-4" />
@@ -212,15 +238,17 @@ export default function GMMacrosPage() {
         </button>
         <button
           onClick={() => {
-            setActiveTab('nodes')
+            setActiveTab('nodes');
             // Auto-create a new macro if none selected
             if (!selectedId && !isNew) {
-              newMacro()
+              newMacro();
             }
           }}
           className={cn(
             'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-            activeTab === 'nodes' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+            activeTab === 'nodes'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
           )}
         >
           <GitBranch className="h-4 w-4" />
@@ -230,10 +258,12 @@ export default function GMMacrosPage() {
 
       <div className="flex flex-1 overflow-hidden relative">
         {/* Code Editor tab */}
-        <div className={cn(
-          'absolute inset-0 flex',
-          activeTab === 'code' ? 'z-10' : 'z-0 pointer-events-none opacity-0'
-        )}>
+        <div
+          className={cn(
+            'absolute inset-0 flex',
+            activeTab === 'code' ? 'z-10' : 'z-0 pointer-events-none opacity-0',
+          )}
+        >
           {/* Left panel: Macro list */}
           <div className="w-72 shrink-0 border-r flex flex-col bg-muted/20">
             <div className="p-3 border-b">
@@ -256,7 +286,9 @@ export default function GMMacrosPage() {
                 <div className="p-4 text-sm text-muted-foreground text-center">Loading...</div>
               )}
               {error && (
-                <div className="p-4 text-sm text-destructive text-center">Failed to load macros</div>
+                <div className="p-4 text-sm text-destructive text-center">
+                  Failed to load macros
+                </div>
               )}
               {!isLoading && !error && filteredMacros.length === 0 && (
                 <div className="p-4 text-sm text-muted-foreground text-center">No macros found</div>
@@ -267,7 +299,7 @@ export default function GMMacrosPage() {
                   onClick={() => selectMacro(macro)}
                   className={cn(
                     'w-full text-left px-3 py-2.5 text-sm border-b border-border/50 hover:bg-accent/50 transition-colors',
-                    selectedId === macro._id && 'bg-accent border-l-2 border-l-primary'
+                    selectedId === macro._id && 'bg-accent border-l-2 border-l-primary',
                   )}
                 >
                   <div className="font-medium truncate">{macro.name || 'Unnamed'}</div>
@@ -281,7 +313,7 @@ export default function GMMacrosPage() {
 
           {/* Right panel: Editor */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {(selectedMacro || isNew) ? (
+            {selectedMacro || isNew ? (
               <>
                 {/* Metadata bar */}
                 <div className="flex items-center gap-3 p-3 border-b bg-muted/10">
@@ -293,7 +325,10 @@ export default function GMMacrosPage() {
                       className="h-9 text-sm font-medium"
                     />
                   </div>
-                  <Select value={editType} onValueChange={(v) => v !== null && onFieldChange('type', v)}>
+                  <Select
+                    value={editType}
+                    onValueChange={(v) => v !== null && onFieldChange('type', v)}
+                  >
                     <SelectTrigger className="w-28 h-9 text-sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -302,7 +337,10 @@ export default function GMMacrosPage() {
                       <SelectItem value="chat">Chat</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={editScope} onValueChange={(v) => v !== null && onFieldChange('scope', v)}>
+                  <Select
+                    value={editScope}
+                    onValueChange={(v) => v !== null && onFieldChange('scope', v)}
+                  >
                     <SelectTrigger className="w-28 h-9 text-sm">
                       <SelectValue />
                     </SelectTrigger>
@@ -336,7 +374,7 @@ export default function GMMacrosPage() {
                         size="sm"
                         variant="destructive"
                         onClick={() => {
-                          if (confirm('Delete this macro?')) deleteMutation.mutate()
+                          if (confirm('Delete this macro?')) deleteMutation.mutate();
                         }}
                         disabled={deleteMutation.isPending}
                         className="gap-1"
@@ -364,10 +402,12 @@ export default function GMMacrosPage() {
         </div>
 
         {/* Node Builder tab */}
-        <div className={cn(
-          'absolute inset-0 flex flex-col',
-          activeTab === 'nodes' ? 'z-10' : 'z-0 pointer-events-none opacity-0'
-        )}>
+        <div
+          className={cn(
+            'absolute inset-0 flex flex-col',
+            activeTab === 'nodes' ? 'z-10' : 'z-0 pointer-events-none opacity-0',
+          )}
+        >
           {/* Metadata bar for Node Builder */}
           <div className="flex items-center gap-3 p-3 border-b bg-muted/10">
             <div className="flex-1">
@@ -387,7 +427,10 @@ export default function GMMacrosPage() {
                 <SelectItem value="chat">Chat</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={editScope} onValueChange={(v) => v !== null && onFieldChange('scope', v)}>
+            <Select
+              value={editScope}
+              onValueChange={(v) => v !== null && onFieldChange('scope', v)}
+            >
               <SelectTrigger className="w-28 h-9 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -421,7 +464,7 @@ export default function GMMacrosPage() {
                   size="sm"
                   variant="destructive"
                   onClick={() => {
-                    if (confirm('Delete this macro?')) deleteMutation.mutate()
+                    if (confirm('Delete this macro?')) deleteMutation.mutate();
                   }}
                   disabled={deleteMutation.isPending}
                   className="gap-1"
@@ -444,5 +487,5 @@ export default function GMMacrosPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

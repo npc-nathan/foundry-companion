@@ -1,7 +1,7 @@
 import { useStore } from './store';
 
 const RELAY_HEADERS = () => {
-  const { relayUrl, apiKey, clientId } = useStore.getState().config;
+  const { apiKey, clientId } = useStore.getState().config;
   return {
     'x-api-key': apiKey,
     'x-client-id': clientId || 'companion-app',
@@ -44,20 +44,6 @@ async function apiPut<T = unknown>(path: string, body?: unknown, query?: Record<
   const url = qs ? `${base}?${qs}` : base;
   const res = await fetch(url, {
     method: 'PUT',
-    headers: RELAY_HEADERS(),
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-  return res.json() as Promise<T>;
-}
-
-async function apiPatch<T = unknown>(path: string, body?: unknown, query?: Record<string, string>) {
-  const base = getUrl(path);
-  const params = new URLSearchParams(query || {});
-  const qs = params.toString();
-  const url = qs ? `${base}?${qs}` : base;
-  const res = await fetch(url, {
-    method: 'PATCH',
     headers: RELAY_HEADERS(),
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -119,7 +105,7 @@ export const relay = {
   createCanvasDocument(
     documentType: string,
     data: Record<string, unknown> | Record<string, unknown>[],
-    sceneId?: string
+    sceneId?: string,
   ): Promise<unknown> {
     return apiPost(`/canvas/${documentType}`, { data }, sceneId ? { sceneId } : undefined);
   },
@@ -129,9 +115,13 @@ export const relay = {
     documentType: string,
     documentId: string,
     data: Record<string, unknown>,
-    sceneId?: string
+    sceneId?: string,
   ): Promise<unknown> {
-    return apiPut(`/canvas/${documentType}`, { documentId, data }, sceneId ? { sceneId } : undefined);
+    return apiPut(
+      `/canvas/${documentType}`,
+      { documentId, data },
+      sceneId ? { sceneId } : undefined,
+    );
   },
 
   /** Delete a canvas embedded document */
@@ -179,23 +169,17 @@ export const relay = {
   structure: (types = 'Actor,Scene,Item', includeEntityData = 'false') =>
     apiGet<unknown>('/structure', { types, includeEntityData }),
 
-  search: (query: string, type = 'Actor') =>
-    apiGet<unknown>('/search', { query, type }),
+  search: (query: string, type = 'Actor') => apiGet<unknown>('/search', { query, type }),
 
-  get: (uuid: string) =>
-    apiGet<unknown>('/get', { uuid }),
+  get: (uuid: string) => apiGet<unknown>('/get', { uuid }),
 
-  encounters: () =>
-    apiGet<unknown>('/encounters'),
+  encounters: () => apiGet<unknown>('/encounters'),
 
-  startEncounter: (body: Record<string, unknown>) =>
-    apiPost('/start-encounter', body),
+  startEncounter: (body: Record<string, unknown>) => apiPost('/start-encounter', body),
 
-  nextTurn: (encounter?: string) =>
-    apiPost('/next-turn', encounter ? { encounter } : undefined),
+  nextTurn: (encounter?: string) => apiPost('/next-turn', encounter ? { encounter } : undefined),
 
-  nextRound: (encounter?: string) =>
-    apiPost('/next-round', encounter ? { encounter } : undefined),
+  nextRound: (encounter?: string) => apiPost('/next-round', encounter ? { encounter } : undefined),
 
   previousTurn: (encounter?: string) =>
     apiPost('/last-turn', encounter ? { encounter } : undefined),
@@ -215,8 +199,7 @@ export const relay = {
   create: (entityType: string, data: Record<string, unknown>, folder?: string) =>
     apiPost('/create', { entityType, data, ...(folder ? { folder } : {}) }),
 
-  update: (uuid: string, data: Record<string, unknown>) =>
-    apiPut('/update', { data }, { uuid }),
+  update: (uuid: string, data: Record<string, unknown>) => apiPut('/update', { data }, { uuid }),
 
   delete: (uuid: string) =>
     fetch(`${getUrl('/delete')}?uuid=${uuid}`, {
@@ -233,11 +216,9 @@ export const relay = {
       ...(alias ? { alias } : {}),
     }),
 
-  getChatMessages: (limit = 50) =>
-    apiGet<unknown>('/chat', { limit: String(limit) }),
+  getChatMessages: (limit = 50) => apiGet<unknown>('/chat', { limit: String(limit) }),
 
-  getRolls: (limit = 20) =>
-    apiGet<unknown>('/rolls', { limit: String(limit) }),
+  getRolls: (limit = 20) => apiGet<unknown>('/rolls', { limit: String(limit) }),
 
   dndAbilityCheck: (params: {
     actorUuid: string;
@@ -266,35 +247,22 @@ export const relay = {
     createChatMessage?: boolean;
   }) => apiPost('/dnd5e/skill-check', params),
 
-  dndDeathSave: (params: {
-    actorUuid: string;
-    advantage?: boolean;
-    createChatMessage?: boolean;
-  }) => apiPost('/dnd5e/death-save', params),
+  dndDeathSave: (params: { actorUuid: string; advantage?: boolean; createChatMessage?: boolean }) =>
+    apiPost('/dnd5e/death-save', params),
 
-  roll: (params: {
-    formula: string;
-    createChatMessage?: boolean;
-  }) => apiPost('/roll', params),
+  roll: (params: { formula: string; createChatMessage?: boolean }) => apiPost('/roll', params),
 
-  getClients: () =>
-    apiGet<unknown>('/clients'),
+  getClients: () => apiGet<unknown>('/clients'),
 
-  getUsers: () =>
-    apiGet<unknown>('/users'),
+  getUsers: () => apiGet<unknown>('/users'),
 
   // ─── D&D 5e Rests ───────────────────────────────────────
 
-  dndShortRest: (params: {
-    actorUuid: string;
-    autoHD?: boolean;
-    autoHDThreshold?: number;
-  }) => apiPost('/dnd5e/short-rest', params),
+  dndShortRest: (params: { actorUuid: string; autoHD?: boolean; autoHDThreshold?: number }) =>
+    apiPost('/dnd5e/short-rest', params),
 
-  dndLongRest: (params: {
-    actorUuid: string;
-    newDay?: boolean;
-  }) => apiPost('/dnd5e/long-rest', params),
+  dndLongRest: (params: { actorUuid: string; newDay?: boolean }) =>
+    apiPost('/dnd5e/long-rest', params),
 
   // ─── D&D 5e Equipment ───────────────────────────────────
 
@@ -314,19 +282,13 @@ export const relay = {
 
   // ─── D&D 5e Spells ──────────────────────────────────────
 
-  dndPrepareSpell: (params: {
-    actorUuid: string;
-    spellName: string;
-    prepared: boolean;
-  }) => apiPost('/dnd5e/prepare-spell', params),
+  dndPrepareSpell: (params: { actorUuid: string; spellName: string; prepared: boolean }) =>
+    apiPost('/dnd5e/prepare-spell', params),
 
   // ─── D&D 5e Currency ─────────────────────────────────────
 
-  dndModifyCurrency: (params: {
-    actorUuid: string;
-    currency: string;
-    amount: number;
-  }) => apiPost('/dnd5e/modify-currency', params),
+  dndModifyCurrency: (params: { actorUuid: string; currency: string; amount: number }) =>
+    apiPost('/dnd5e/modify-currency', params),
 
   // ─── D&D 5e Saves ───────────────────────────────────────
 
@@ -341,8 +303,7 @@ export const relay = {
 
   // ─── Effects ─────────────────────────────────────────────
 
-  getActorEffects: (uuid: string) =>
-    apiGet<unknown>('/effects', { uuid }),
+  getActorEffects: (uuid: string) => apiGet<unknown>('/effects', { uuid }),
 
   createEffect: (params: {
     uuid: string;
@@ -363,15 +324,11 @@ export const relay = {
 
   // ─── Combat ──────────────────────────────────────────────
 
-  addCombatants: (params: {
-    tokens: string[];
-    encounter?: string;
-  }) => apiPost('/add-to-encounter', params),
+  addCombatants: (params: { tokens: string[]; encounter?: string }) =>
+    apiPost('/add-to-encounter', params),
 
-  removeCombatant: (params: {
-    combatantUuid: string;
-    encounter?: string;
-  }) => apiPost('/remove-from-encounter', params),
+  removeCombatant: (params: { combatantUuid: string; encounter?: string }) =>
+    apiPost('/remove-from-encounter', params),
 
   // ─── World Info / Module Detection ──────────────────────
 
@@ -391,28 +348,22 @@ export const relay = {
       [key: string]: unknown;
     }>('/world-info'),
 
-  executeJs: (script: string) =>
-    apiPost<{ result: unknown }>('/execute-js', { script }),
+  executeJs: (script: string) => apiPost<{ result: unknown }>('/execute-js', { script }),
 
   // ─── Macros ──────────────────────────────────────────────
 
-  getMacros: () =>
-    apiGet<unknown>('/macros'),
+  getMacros: () => apiGet<unknown>('/macros'),
 
-  createMacro: (params: {
-    name: string;
-    type: string;
-    scope: string;
-    command: string;
-  }) => apiPost('/create', {
-    entityType: 'Macro',
-    data: {
-      name: params.name,
-      type: params.type,
-      scope: params.scope,
-      command: params.command
-    }
-  }),
+  createMacro: (params: { name: string; type: string; scope: string; command: string }) =>
+    apiPost('/create', {
+      entityType: 'Macro',
+      data: {
+        name: params.name,
+        type: params.type,
+        scope: params.scope,
+        command: params.command,
+      },
+    }),
 
   updateMacro: (uuid: string, data: Record<string, unknown>) =>
     apiPut<unknown>('/update', { data }, { uuid }),
@@ -422,30 +373,34 @@ export const relay = {
       method: 'DELETE',
       headers: RELAY_HEADERS(),
     }).then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`)
-      return r.text()
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+      return r.text();
     }),
 
-  executeMacro: (uuid: string) =>
-    apiPost('/macro/' + uuid + '/execute'),
+  executeMacro: (uuid: string) => apiPost('/macro/' + uuid + '/execute'),
 
   // ─── Scenes ───────────────────────────────────────────────
 
-  activateScene: (params: { sceneId: string }) =>
-    apiPost('/activate-scene', params),
+  activateScene: (params: { sceneId: string }) => apiPost('/switch-scene', params),
 
-  mcpCall: (toolName: string, params: Record<string, unknown>) =>
-    apiPost(`/${toolName}`, params),
+  mcpCall: (toolName: string, params: Record<string, unknown>) => apiPost(`/${toolName}`, params),
 
   // ─── Journals ─────────────────────────────────────────────
 
   getJournals: () =>
-    apiGet<unknown>('/structure', { types: 'JournalEntry', includeEntityData: 'true', recursive: 'true' }),
+    apiGet<unknown>('/structure', {
+      types: 'JournalEntry',
+      includeEntityData: 'true',
+      recursive: 'true',
+    }),
 
-  getJournal: (uuid: string) =>
-    apiGet<unknown>('/get', { uuid }),
+  getJournal: (uuid: string) => apiGet<unknown>('/get', { uuid }),
 
-  createJournal: (params: { name: string; pages: Array<{ name: string; content: string; type?: string }>; folder?: string }) => {
+  createJournal: (params: {
+    name: string;
+    pages: Array<{ name: string; content: string; type?: string }>;
+    folder?: string;
+  }) => {
     const { folder, ...data } = params;
     return apiPost('/create', { entityType: 'JournalEntry', data, ...(folder ? { folder } : {}) });
   },

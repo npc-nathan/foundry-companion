@@ -6,7 +6,6 @@ import { relay } from '@/lib/relay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
@@ -35,7 +34,6 @@ import {
   ChevronRight,
   ChevronDown,
   Edit,
-  Eye,
   Save,
   X,
   Image,
@@ -95,7 +93,9 @@ function extractJournals(data: unknown): {
   const entitiesRaw = dataBlock?.entities as Record<string, unknown> | undefined;
 
   // Read unfiled journals from flat entities list
-  const flatEntries: JournalStub[] = ((entitiesRaw?.journalentrys as Record<string, unknown>[]) || []).map((j) => ({
+  const flatEntries: JournalStub[] = (
+    (entitiesRaw?.journalentrys as Record<string, unknown>[]) || []
+  ).map((j) => ({
     _id: j._id as string,
     uuid: `JournalEntry.${j._id as string}`,
     name: j.name as string,
@@ -169,10 +169,15 @@ function extractJournals(data: unknown): {
 
 function PageTypeIcon({ type }: { type: string }) {
   switch (type) {
-    case 'image': return <Image className="h-3 w-3" />;
-    case 'video': return <Video className="h-3 w-3" />;
-    case 'pdf': return <FileText className="h-3 w-3" />;
-    default: return <BookText className="h-3 w-3" />;
+    case 'image':
+      // eslint-disable-next-line jsx-a11y/alt-text -- Lucide icon component, not HTML <img>
+      return <Image className="h-3 w-3" aria-hidden="true" />;
+    case 'video':
+      return <Video className="h-3 w-3" />;
+    case 'pdf':
+      return <FileText className="h-3 w-3" />;
+    default:
+      return <BookText className="h-3 w-3" />;
   }
 }
 
@@ -201,7 +206,9 @@ export default function JournalsPage() {
   // Track pages deleted in edit mode (by _id) — cleared on save or cancel
   const [deletedPageIds, setDeletedPageIds] = useState<string[]>([]);
   const deletedPageIdsRef = useRef<string[]>([]);
-  useEffect(() => { deletedPageIdsRef.current = deletedPageIds; }, [deletedPageIds]);
+  useEffect(() => {
+    deletedPageIdsRef.current = deletedPageIds;
+  }, [deletedPageIds]);
 
   // ─── Queries ──────────────────────────────────────────────
 
@@ -238,88 +245,86 @@ export default function JournalsPage() {
     onError: (err) => toast.error(String(err)),
   });
 
-// ─── Fix the saveMutation ────────────────────────────
+  // ─── Fix the saveMutation ────────────────────────────
   const saveMutation = useMutation({
-      mutationFn: async () => {
-        if (!selectedId) throw new Error('No journal selected');
-        const journal = journalData?.data;
-        if (!journal) throw new Error('Journal data not loaded');
+    mutationFn: async () => {
+      if (!selectedId) throw new Error('No journal selected');
+      const journal = journalData?.data;
+      if (!journal) throw new Error('Journal data not loaded');
 
-        const deletedIds = [...deletedPageIdsRef.current];
+      const deletedIds = [...deletedPageIdsRef.current];
 
-        // Capture current page's edit if editing an existing page
-        if (editPageIndex < journal.pages.length) {
-          dirtyPagesRef.current.set(editPageIndex, {
-            name: editPageName,
-            content: editPageContent,
-          });
-        }
+      // Capture current page's edit if editing an existing page
+      if (editPageIndex < journal.pages.length) {
+        dirtyPagesRef.current.set(editPageIndex, {
+          name: editPageName,
+          content: editPageContent,
+        });
+      }
 
-        // Capture current page if editing a pending new page
-        const pendingPageIndex = editPageIndex - journal.pages.length;
-        const pendingNewPages = [...newPages];
-        if (pendingPageIndex >= 0 && pendingPageIndex < pendingNewPages.length) {
-          pendingNewPages[pendingPageIndex] = {
-            ...pendingNewPages[pendingPageIndex],
-            name: editPageName,
-            content: editPageContent,
+      // Capture current page if editing a pending new page
+      const pendingPageIndex = editPageIndex - journal.pages.length;
+      const pendingNewPages =
+        pendingPageIndex >= 0 && pendingPageIndex < newPages.length
+          ? newPages.map((p, i) =>
+              i === pendingPageIndex ? { ...p, name: editPageName, content: editPageContent } : p,
+            )
+          : [...newPages];
+
+      // Build final pages list: filter deleted, then apply dirty edits by renderable index
+      const existingPages = journal.pages.filter((p) => !deletedIds.includes(p._id));
+      const finalExisting = existingPages.map((page, idx) => {
+        const dirty = dirtyPagesRef.current.get(idx);
+        if (dirty) {
+          return {
+            ...page,
+            name: dirty.name,
+            text: { content: dirty.content, format: page.text?.format ?? 1 },
           };
         }
+        return page;
+      });
 
-        // Build final pages list: filter deleted, then apply dirty edits by renderable index
-        const existingPages = journal.pages.filter((p) => !deletedIds.includes(p._id));
-        const finalExisting = existingPages.map((page, idx) => {
-          const dirty = dirtyPagesRef.current.get(idx);
-          if (dirty) {
-            return {
-              ...page,
-              name: dirty.name,
-              text: { content: dirty.content, format: page.text?.format ?? 1 },
-            };
-          }
-          return page;
-        });
+      // Append new pages
+      const finalPages = [
+        ...finalExisting,
+        ...pendingNewPages.map((np) => ({
+          name: np.name,
+          type: np.type || 'text',
+          text: { content: np.content, format: 1 },
+          sort: finalExisting.length,
+        })),
+      ];
 
-        // Append new pages
-        const finalPages: Record<string, unknown>[] = [
-          ...finalExisting,
-          ...pendingNewPages.map((np) => ({
-            name: np.name,
-            type: np.type || 'text',
-            text: { content: np.content, format: 1 },
-            sort: finalExisting.length,
-          })),
-        ];
-
-        // Delete marked pages via execute-js (Foundry requires this)
-        const extractedUuid = selectedId.replace('JournalEntry.', '');
-        for (const pageId of deletedIds) {
-          const result = await relay.executeJs(
-            `const j = game.journal.get("${extractedUuid}"); await j.deleteEmbeddedDocuments("JournalEntryPage", ["${pageId}"]); return j.pages.size;`
-          );
-          const resultData = result as { success?: boolean; error?: string };
-          if (resultData.success === false) {
-            throw new Error(`Failed to delete page: ${resultData.error}`);
-          }
+      // Delete marked pages via execute-js (Foundry requires this)
+      const extractedUuid = selectedId.replace('JournalEntry.', '');
+      for (const pageId of deletedIds) {
+        const result = await relay.executeJs(
+          `const j = game.journal.get("${extractedUuid}"); await j.deleteEmbeddedDocuments("JournalEntryPage", ["${pageId}"]); return j.pages.size;`,
+        );
+        const resultData = result as { success?: boolean; error?: string };
+        if (resultData.success === false) {
+          throw new Error(`Failed to delete page: ${resultData.error}`);
         }
+      }
 
-        // Update the journal
-        return relay.updateJournal(selectedId, {
-          name: editName,
-          pages: finalPages,
-        });
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['journal', selectedId] });
-        queryClient.invalidateQueries({ queryKey: ['journals'] });
-        setViewMode('view');
-        setNewPages([]);
-        setDeletedPageIds([]);
-        dirtyPagesRef.current.clear();
-        toast.success('Journal saved');
-      },
-      onError: (err) => toast.error(String(err)),
-    });
+      // Update the journal
+      return relay.updateJournal(selectedId, {
+        name: editName,
+        pages: finalPages,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['journal', selectedId] });
+      queryClient.invalidateQueries({ queryKey: ['journals'] });
+      setViewMode('view');
+      setNewPages([]);
+      setDeletedPageIds([]);
+      dirtyPagesRef.current.clear();
+      toast.success('Journal saved');
+    },
+    onError: (err) => toast.error(String(err)),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: () => relay.deleteJournal(selectedId!),
@@ -335,9 +340,7 @@ export default function JournalsPage() {
   // ─── Filtered lists ───────────────────────────────────────
 
   const filterJournals = (list: JournalStub[]) =>
-    search
-      ? list.filter((j) => j.name.toLowerCase().includes(search.toLowerCase()))
-      : list;
+    search ? list.filter((j) => j.name.toLowerCase().includes(search.toLowerCase())) : list;
 
   const allJournalsFlat = useMemo(() => {
     const result: JournalStub[] = [];
@@ -349,9 +352,7 @@ export default function JournalsPage() {
   }, [folders, unfiled]);
 
   const filteredCount = search
-    ? allJournalsFlat.filter((j) =>
-        j.name.toLowerCase().includes(search.toLowerCase())
-      ).length
+    ? allJournalsFlat.filter((j) => j.name.toLowerCase().includes(search.toLowerCase())).length
     : allJournalsFlat.length;
 
   // ─── Select journal ───────────────────────────────────────
@@ -369,14 +370,14 @@ export default function JournalsPage() {
     if (!j) return;
     setDeletedPageIds([]);
     setEditName(j.name);
-    const page = j.pages[editPageIndex];
+    const page = j.pages.at(editPageIndex);
     if (page) {
       setEditPageName(page.name);
       setEditPageContent(page.text?.content || '');
     } else if (editPageIndex >= j.pages.length) {
       // Restore pending new page state
       const npIndex = editPageIndex - j.pages.length;
-      const np = newPages[npIndex];
+      const np = newPages.at(npIndex);
       if (np) {
         setEditPageName(np.name);
         setEditPageContent(np.content);
@@ -398,35 +399,35 @@ export default function JournalsPage() {
 
   // ─── Get available folder IDs for create dialog ──────────
 
-  const folderOptions = useMemo(
-    () => folders.map((f) => ({ id: f.id, name: f.name })),
-    [folders]
-  );
+  const folderOptions = useMemo(() => folders.map((f) => ({ id: f.id, name: f.name })), [folders]);
 
   // ─── Render ───────────────────────────────────────────────
 
   // Compute selected journal from the filtered list
   const selectedJournal = journalData?.data;
-  const pages = selectedJournal?.pages || [];
+  const pages = useMemo(() => selectedJournal?.pages || [], [selectedJournal]);
   const renderablePages = useMemo(() => {
     if (viewMode === 'edit') {
       const existing = pages.filter((p) => !deletedPageIds.includes(p._id));
-      return [...existing, ...newPages.map((np, i) => ({
-        ...np,
-        _id: `pending_${i}`,
-        text: { content: np.content, format: 1 as const },
-        type: np.type as 'text',
-        title: { show: true, level: 1 },
-        image: {},
-        video: { controls: true, volume: 0.5 },
-        src: null,
-        ownership: {},
-        sort: existing.length + i,
-      }))];
+      return [
+        ...existing,
+        ...newPages.map((np, i) => ({
+          ...np,
+          _id: `pending_${i}`,
+          text: { content: np.content, format: 1 as const },
+          type: np.type as 'text',
+          title: { show: true, level: 1 },
+          image: {},
+          video: { controls: true, volume: 0.5 },
+          src: null,
+          ownership: {},
+          sort: existing.length + i,
+        })),
+      ];
     }
     return pages;
   }, [pages, newPages, viewMode, deletedPageIds]);
-  const currentPage = renderablePages[editPageIndex];
+  const currentPage = renderablePages.at(editPageIndex);
 
   return (
     <div className="h-full flex flex-col">
@@ -434,9 +435,7 @@ export default function JournalsPage() {
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Journals</h1>
-          <p className="text-sm text-muted-foreground">
-            {allJournalsFlat.length} entries
-          </p>
+          <p className="text-sm text-muted-foreground">{allJournalsFlat.length} entries</p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="h-4 w-4 mr-1.5" />
@@ -491,9 +490,7 @@ export default function JournalsPage() {
                           ) : (
                             <Folder className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          <span className="truncate flex-1 text-left">
-                            {folder.name}
-                          </span>
+                          <span className="truncate flex-1 text-left">{folder.name}</span>
                           <span className="text-[10px] tabular-nums">
                             {filteredEntities.length}
                           </span>
@@ -579,9 +576,7 @@ export default function JournalsPage() {
                       className="text-lg font-bold h-9"
                     />
                   ) : (
-                    <CardTitle className="text-lg truncate">
-                      {selectedJournal.name}
-                    </CardTitle>
+                    <CardTitle className="text-lg truncate">{selectedJournal.name}</CardTitle>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
                     {pages.length} page{pages.length !== 1 ? 's' : ''}
@@ -643,16 +638,19 @@ export default function JournalsPage() {
                           // ── Save current page edits ──
                           if (editPageIndex < pages.length) {
                             // Existing page — save to dirtyPages
-                            dirtyPagesRef.current.set(editPageIndex, { name: editPageName, content: editPageContent });
+                            dirtyPagesRef.current.set(editPageIndex, {
+                              name: editPageName,
+                              content: editPageContent,
+                            });
                           } else {
                             // New page — save to newPages
-                            const npIdx = editPageIndex - pages.length;
                             setNewPages((prev) => {
-                              const next = [...prev];
-                              if (next[npIdx]) {
-                                next[npIdx] = { ...next[npIdx], name: editPageName, content: editPageContent };
-                              }
-                              return next;
+                              const npIdx = editPageIndex - pages.length;
+                              return prev.map((p, i) =>
+                                i === npIdx
+                                  ? { ...p, name: editPageName, content: editPageContent }
+                                  : p,
+                              );
                             });
                           }
                           // ── Switch to target page ──
@@ -664,13 +662,13 @@ export default function JournalsPage() {
                               setEditPageName(dirty.name);
                               setEditPageContent(dirty.content);
                             } else {
-                              const tp = pages[i];
+                              const tp = pages.at(i);
                               setEditPageName(tp?.name || '');
                               setEditPageContent(tp?.text?.content || '');
                             }
                           } else {
                             const npIdx = i - pages.length;
-                            const np = newPages[npIdx];
+                            const np = newPages.at(npIdx);
                             if (np) {
                               setEditPageName(np.name);
                               setEditPageContent(np.content);
@@ -697,16 +695,19 @@ export default function JournalsPage() {
                               // ── Delete page ──
                               if (i < pages.length) {
                                 // Existing page — mark for deletion
-                                const pid = pages[i]._id;
-                                setDeletedPageIds((prev) => [...prev, pid]);
-                                // If we just deleted the current page, adjust index
-                                if (editPageIndex === i) {
-                                  const remainingCount = renderablePages.length - 1;
-                                  if (remainingCount > 0) {
-                                    setEditPageIndex(Math.min(i, remainingCount - 1));
+                                const page = pages.at(i);
+                                if (page) {
+                                  const pid = page._id;
+                                  setDeletedPageIds((prev) => [...prev, pid]);
+                                  // If we just deleted the current page, adjust index
+                                  if (editPageIndex === i) {
+                                    const remainingCount = renderablePages.length - 1;
+                                    if (remainingCount > 0) {
+                                      setEditPageIndex(Math.min(i, remainingCount - 1));
+                                    }
+                                  } else if (editPageIndex > i) {
+                                    setEditPageIndex((prev) => prev - 1);
                                   }
-                                } else if (editPageIndex > i) {
-                                  setEditPageIndex((prev) => prev - 1);
                                 }
                               } else {
                                 // Pending new page — just remove
@@ -744,7 +745,10 @@ export default function JournalsPage() {
                         onClick={() => {
                           const npIndex = pages.length + newPages.length;
                           const name = `Page ${npIndex + 1}`;
-                          setNewPages((prev) => [...prev, { name, content: '<p>New page</p>', type: 'text' }]);
+                          setNewPages((prev) => [
+                            ...prev,
+                            { name, content: '<p>New page</p>', type: 'text' },
+                          ]);
                           setEditPageIndex(npIndex);
                           setEditPageName(name);
                           setEditPageContent('<p>New page</p>');
@@ -770,7 +774,10 @@ export default function JournalsPage() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditPageName(val);
-                            dirtyPagesRef.current.set(editPageIndex, { name: val, content: editPageContent });
+                            dirtyPagesRef.current.set(editPageIndex, {
+                              name: val,
+                              content: editPageContent,
+                            });
                           }}
                           placeholder="Page title"
                           className="font-medium"
@@ -780,13 +787,17 @@ export default function JournalsPage() {
                           onChange={(e) => {
                             const val = e.target.value;
                             setEditPageContent(val);
-                            dirtyPagesRef.current.set(editPageIndex, { name: editPageName, content: val });
+                            dirtyPagesRef.current.set(editPageIndex, {
+                              name: editPageName,
+                              content: val,
+                            });
                           }}
                           className="w-full h-[400px] font-mono text-sm p-3 rounded-md border bg-background resize-y"
                           placeholder="HTML content..."
                         />
                         <p className="text-xs text-muted-foreground">
-                          Edit page content as HTML. Supported: paragraphs, lists, tables, images, links.
+                          Edit page content as HTML. Supported: paragraphs, lists, tables, images,
+                          links.
                         </p>
                       </div>
                     ) : currentPage.type === 'image' ? (
@@ -834,41 +845,35 @@ export default function JournalsPage() {
                       />
                     )
                   ) : editPageIndex >= pages.length && viewMode === 'edit' ? (
-                      <div className="p-4 space-y-3">
-                        <Input
-                          value={editPageName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditPageName(val);
-                            const npIdx = editPageIndex - pages.length;
-                            setNewPages((prev) => {
-                              const next = [...prev];
-                              if (next[npIdx]) next[npIdx] = { ...next[npIdx], name: val };
-                              return next;
-                            });
-                          }}
-                          placeholder="Page title"
-                          className="font-medium"
-                        />
-                        <textarea
-                          value={editPageContent}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setEditPageContent(val);
-                            const npIdx = editPageIndex - pages.length;
-                            setNewPages((prev) => {
-                              const next = [...prev];
-                              if (next[npIdx]) next[npIdx] = { ...next[npIdx], content: val };
-                              return next;
-                            });
-                          }}
-                          className="w-full h-[400px] font-mono text-sm p-3 rounded-md border bg-background resize-y"
-                          placeholder="HTML content..."
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          New page — save to persist.
-                        </p>
-                      </div>
+                    <div className="p-4 space-y-3">
+                      <Input
+                        value={editPageName}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditPageName(val);
+                          const npIdx = editPageIndex - pages.length;
+                          setNewPages((prev) => {
+                            return prev.map((p, i) => (i === npIdx ? { ...p, name: val } : p));
+                          });
+                        }}
+                        placeholder="Page title"
+                        className="font-medium"
+                      />
+                      <textarea
+                        value={editPageContent}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditPageContent(val);
+                          const npIdx = editPageIndex - pages.length;
+                          setNewPages((prev) => {
+                            return prev.map((p, i) => (i === npIdx ? { ...p, content: val } : p));
+                          });
+                        }}
+                        className="w-full h-[400px] font-mono text-sm p-3 rounded-md border bg-background resize-y"
+                        placeholder="HTML content..."
+                      />
+                      <p className="text-xs text-muted-foreground">New page — save to persist.</p>
+                    </div>
                   ) : (
                     <div className="p-8 text-center text-muted-foreground space-y-3">
                       <p>No pages in this journal</p>
@@ -878,7 +883,10 @@ export default function JournalsPage() {
                           variant="outline"
                           onClick={() => {
                             const name = 'Page 1';
-                            setNewPages((prev) => [...prev, { name, content: '<p>New page</p>', type: 'text' }]);
+                            setNewPages((prev) => [
+                              ...prev,
+                              { name, content: '<p>New page</p>', type: 'text' },
+                            ]);
                             setEditPageIndex(0);
                             setEditPageName(name);
                             setEditPageContent('<p>New page</p>');
@@ -956,8 +964,8 @@ export default function JournalsPage() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Are you sure you want to delete{' '}
-            <strong>{selectedJournal?.name || 'this journal'}</strong>?
-            This action cannot be undone.
+            <strong>{selectedJournal?.name || 'this journal'}</strong>? This action cannot be
+            undone.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDelete(false)}>
