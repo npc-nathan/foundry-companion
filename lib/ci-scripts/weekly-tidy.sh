@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-PROJECT_DIR="/home/talos/foundry-companion"
+PROJECT_DIR="~/foundry-companion"
 BRANCH="tidy/$(date +%Y-%m-%d)"
 cd "$PROJECT_DIR"
 
