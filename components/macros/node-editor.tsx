@@ -656,16 +656,11 @@ function FlowCanvas({
   const reactFlowInstance = useReactFlow<Node<CustomNodeData>>();
   const [nodes, setNodes, onNodesChange] = useNodesState<MacroNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<MacroEdge>([]);
-  // Load initial node graph from props (only on mount, not on every render)
-  const loadedRef = useRef(false);
+  // Load initial node graph from props when they change (new macro selected or data reloaded)
   useEffect(() => {
-    if (initialNodes && initialEdges && initialNodes.length > 0 && !loadedRef.current) {
+    if (initialNodes && initialEdges && initialNodes.length > 0) {
       setNodes(initialNodes as MacroNode[]);
       setEdges(initialEdges as MacroEdge[]);
-      loadedRef.current = true;
-    }
-    if (!initialNodes || !initialEdges || initialNodes.length === 0) {
-      loadedRef.current = false;
     }
   }, [initialNodes, initialEdges, setNodes, setEdges]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,7 @@ export default function GMMacrosPage() {
   const [editCommand, setEditCommand] = useState('');
   const [isNew, setIsNew] = useState(false);
   const [nodeGraph, setNodeGraph] = useState<{ nodes: unknown[]; edges: unknown[] } | null>(null);
+  const saveFromNodes = useRef(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['macros'],
@@ -98,13 +99,15 @@ export default function GMMacrosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Get latest exported code from node editor
+      // Get latest code — from node editor only if saving from Nodes tab
       let code = editCommand;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-component via window
-      const exportFn = (window as any).__nodeEditor_export;
-      if (typeof exportFn === 'function') {
-        const exported = exportFn();
-        if (exported) code = exported;
+      if (saveFromNodes.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-component via window
+        const exportFn = (window as any).__nodeEditor_export;
+        if (typeof exportFn === 'function') {
+          const exported = exportFn();
+          if (exported) code = exported;
+        }
       }
       const command = code;
       if (isNew) {
@@ -124,7 +127,9 @@ export default function GMMacrosPage() {
       if (isNew && data) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API response shape varies
         const result = data as any;
-        const newId = result.uuid || result._id || result.id || '';
+        // Relay wraps responses in { type, data }, so UUID may be nested
+        const payload = result.data || result;
+        const newId = payload.uuid || payload._id || payload.id || '';
         if (newId) {
           setSelectedId(newId);
           setIsNew(false);
@@ -362,7 +367,10 @@ export default function GMMacrosPage() {
                     </Button>
                     <Button
                       size="sm"
-                      onClick={() => saveMutation.mutate()}
+                      onClick={() => {
+                        saveFromNodes.current = false;
+                        saveMutation.mutate();
+                      }}
                       disabled={saveMutation.isPending}
                       className="gap-1"
                     >
@@ -452,7 +460,10 @@ export default function GMMacrosPage() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => saveMutation.mutate()}
+                onClick={() => {
+                  saveFromNodes.current = true;
+                  saveMutation.mutate();
+                }}
                 disabled={saveMutation.isPending}
                 className="gap-1"
               >
