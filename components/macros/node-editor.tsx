@@ -41,6 +41,7 @@ import {
   Blocks,
   Puzzle,
   X,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { relay } from '@/lib/relay';
@@ -63,6 +64,7 @@ import {
   type CodeGenContext,
   type PaletteItem,
 } from '@/lib/node-definitions';
+import type { MacroInputPort } from '@/lib/parse-macro-inputs';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -115,6 +117,8 @@ interface CustomNodeData {
   // module-specific
   moduleId?: string;
   moduleVersion?: string;
+  // runMacro dynamic ports from macro scanning
+  dynamicPorts?: MacroInputPort[];
   [key: string]: unknown;
 }
 
@@ -230,6 +234,34 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
             </Tooltip>
           );
         })}
+
+      {/* Dynamic Data Inputs (from parsed child macro) */}
+      {data.dynamicPorts && data.dynamicPorts.length > 0 && (
+        <>
+          <div className="absolute text-[8px] text-muted-foreground/40 uppercase tracking-wider"
+               style={{ left: '4px', top: `${58 + (dataPorts.filter(p => p.type === 'input').length) * 10}%` }}>
+            overrides
+          </div>
+          {data.dynamicPorts.map((port, j) => (
+            <Tooltip key={`data-in-dp-${port.id}`}>
+              <TooltipTrigger>
+                <Handle
+                  type="target"
+                  position={Position.Left}
+                  id={`data-in-${port.id}`}
+                  className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
+                  style={{ top: `${65 + j * 18}%` }}
+                />
+              </TooltipTrigger>
+              <TooltipContent side="left" className="max-w-xs p-2">
+                <div className="text-xs font-semibold mb-1">{port.label}</div>
+                <div className="text-[10px] text-muted-foreground">Type: {port.dataType}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground/70">{port.description}</div>
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </>
+      )}
 
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -834,6 +866,11 @@ function FlowCanvas({
     lines.push('// Generated from node graph: ' + (macroName || 'Untitled Macro'));
     lines.push('');
     lines.push('async function executeMacro() {');
+    // Inject parent override preamble — always present, resolves to {} if uncalled
+    lines.push('  // ── Parent Macro Override ──');
+    lines.push('  const __args = window.__macroArgs;');
+    lines.push('  window.__macroArgs = undefined;');
+    lines.push('  // ── End Override ──');
 
     // Smart token guard: scan graph to determine if/how token is needed
     const hasControlled = nodes.some((n) => {
@@ -978,6 +1015,67 @@ function FlowCanvas({
   const selectedNodeData = selectedNode
     ? (nodes.find((n) => n.id === selectedNode)?.data ?? null)
     : null;
+
+  // ─── Scan child macro for input ports ────────────────
+  const scanMacroInputs = useCallback(async () => {
+    const macroName = selectedNodeData?.macroName as string | undefined;
+    const macroUuid = selectedNodeData?.macroUuid as string | undefined;
+    if (!macroName && !macroUuid) return;
+
+    toast.info('Scanning macro for input ports...');
+    try {
+      let command = '';
+      // Try by UUID first (most reliable)
+      if (macroUuid) {
+        const doc = await relay.get(macroUuid);
+        if (doc && typeof doc === 'object') {
+          // The relay's /get endpoint may nest data under a key
+          const maybeCommand = (doc as Record<string, unknown>).command
+            || ((doc as Record<string, unknown>).data as Record<string, unknown> | undefined)?.command;
+          if (maybeCommand && typeof maybeCommand === 'string') command = maybeCommand;
+        }
+      }
+      // Fallback: fetch all macros and search by name
+      if (!command && macroName) {
+        const macrosResp = await relay.getMacros();
+        const macroList = (
+          (macrosResp as Record<string, unknown>).macros as
+            Array<Record<string, unknown>> | undefined
+        ) || [];
+        const found = macroList.find((m) => m.name === macroName);
+        if (found) {
+          // Full macro data may have `command` at top level or nested
+          command = (found.command as string) || '';
+        }
+      }
+
+      if (!command) {
+        toast.error('Could not read macro: ' + (macroName || macroUuid));
+        return;
+      }
+
+      const { analyzeInputRequirements } = await import('@/lib/parse-macro-inputs');
+      const ports = analyzeInputRequirements(command);
+
+      // Update the node's dynamicPorts
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === selectedNode
+            ? { ...n, data: { ...n.data, dynamicPorts: ports } }
+            : n,
+        ),
+      );
+
+      if (ports.length > 0) {
+        toast.success(`Found ${ports.length} input port(s) — wire data pipes to override`);
+      } else {
+        toast.success('Macro scanned — no overrideable inputs detected');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast.error('Error scanning macro: ' + msg);
+    }
+  }, [selectedNode, selectedNodeData]);
   // Expose exportCode so parent can call it before save
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cross-component via window
@@ -1228,6 +1326,27 @@ function FlowCanvas({
                     });
                 })()}
               </div>
+
+              {/* Scan Macro Inputs button — only for runMacro nodes */}
+              {selectedNodeData.type === 'runMacro' && (
+                <div className="pt-2 border-t border-border/50">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs gap-1"
+                    onClick={scanMacroInputs}
+                    disabled={!selectedNodeData.macroName && !selectedNodeData.macroUuid}
+                  >
+                    <Search className="h-3 w-3" />
+                    Scan Macro Inputs
+                  </Button>
+                  {selectedNodeData.dynamicPorts && selectedNodeData.dynamicPorts.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground/60 mt-1.5 text-center">
+                      {selectedNodeData.dynamicPorts.length} input port(s) available
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Expression Editor Modal — rendered at z-20 to overlay properly */}

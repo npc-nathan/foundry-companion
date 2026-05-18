@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getModuleNodeDefinition } from '@/lib/module-mappings';
+import type { MacroInputPort } from '@/lib/parse-macro-inputs';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -287,8 +288,9 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     codeGen: ({ d, indent, dataVar, esc }) => {
       const formula = String(d.formula || '1d20');
       return [
-        indent + '// Roll Dice: ' + formula + ' -> e.g. result: 17',
-        indent + 'const roll = new Roll("' + esc(formula) + '")',
+        indent + '// Roll Dice',
+        indent + 'const __formula = __args?.rollDice || "' + esc(formula) + '"',
+        indent + 'const roll = new Roll(__formula)',
         indent + 'await roll.evaluate({ async: true })',
         ...(d.flavor ? [indent + 'roll.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
         indent + 'const ' + dataVar('roll_object') + ' = roll',
@@ -1000,8 +1002,8 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     codeGen: ({ d, indent, dataVar, esc }) => {
       const query = String(d.actorQuery || '');
       return [
-        indent + '// Search Actors: ' + query + ' -> e.g. finds Gandalf actor by name',
-        indent + 'const ' + dataVar('actor') + ' = ' + (query
+        indent + '// Search Actors',
+        indent + 'const ' + dataVar('actor') + ' = __args?.searchActors || ' + (query
           ? 'game.actors.getName("' + esc(query) + '") || canvas.tokens.placeables.find(t => t.name === "' + esc(query) + '")?.actor'
           : 'game.user.targets.first()?.actor'),
       ];
@@ -1029,8 +1031,8 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     example: { name: 'Goblin Archer', x: 1200, y: 800, elevation: 0 },
     codeGen: ({ indent, dataVar }) => {
       return [
-        indent + '// Search Targets -> e.g. gets first targeted token on canvas',
-        indent + 'const ' + dataVar('target') + ' = game.user.targets.first() || token',
+        indent + '// Search Targets',
+        indent + 'const ' + dataVar('target') + ' = __args?.searchTargets || game.user.targets.first() || token',
       ];
     },
   },
@@ -1133,7 +1135,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     category: 'macro',
     description: 'Execute a Foundry macro',
     icon: <Puzzle className="h-3 w-3 text-purple-400" />,
-    defaultData: { macroName: '', macroUuid: '' },
+    defaultData: { macroName: '', macroUuid: '', dynamicPorts: [] as MacroInputPort[] },
     actorSource: 'none',
     ports: [{ id: 'macroUuid', label: 'Macro', type: 'input', dataType: 'string' }],
     fields: [
@@ -1155,14 +1157,32 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     codeGen: ({ d, indent, fieldVal, esc }) => {
       const macroName = String(d.macroName || '');
       const macroRef = fieldVal('macroUuid', '');
+      const dynPorts = (d.dynamicPorts || []) as MacroInputPort[];
       const lines: string[] = [
-        indent + '// Run Macro: ' + macroName + ' -> executes Fireball from Foundry macros',
+        indent + '// Run Macro: ' + macroName,
       ];
+
+      // Build args object from dynamic ports with connected data pipes
+      const argEntries: string[] = [];
+      for (const port of dynPorts) {
+        const val = fieldVal(port.id, '');
+        if (val) argEntries.push(port.id + ': ' + val);
+      }
+
+      if (argEntries.length > 0) {
+        lines.push(indent + 'window.__macroArgs = { ' + argEntries.join(', ') + ' }');
+      }
+
       if (macroRef && macroRef !== macroName) {
         lines.push(indent + 'game.macros.get("' + esc(macroRef) + '")?.execute()');
       } else if (macroName) {
         lines.push(indent + 'game.macros.getName("' + esc(macroName) + '")?.execute()');
       }
+
+      if (argEntries.length > 0) {
+        lines.push(indent + 'delete window.__macroArgs');
+      }
+
       return lines;
     },
   },
