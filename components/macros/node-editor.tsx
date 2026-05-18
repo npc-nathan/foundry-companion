@@ -251,7 +251,7 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
                   position={Position.Left}
                   id={`data-in-${port.id}`}
                   className={`!w-2.5 !h-2.5 !border-2 ${dataTypeColor[port.dataType] || dataTypeColor.any}`}
-                  style={{ top: `${65 + j * 18}%` }}
+                  style={{ top: `${65 + j * Math.min(18, 40 / Math.max(data.dynamicPorts!.length, 1))}%` }}
                 />
               </TooltipTrigger>
               <TooltipContent side="left" className="max-w-xs p-2">
@@ -1256,7 +1256,7 @@ function FlowCanvas({
                     className="h-8 text-xs mt-0.5"
                     value={(selectedNodeData.nodeName as string) || ''}
                     onChange={(e) =>
-                      updateNodeData(selectedNode!, 'nodeName', e.target.value)
+                      updateNodeData(selectedNode!, 'nodeName', e.target.value.replace(/[^a-zA-Z0-9_$\s-]/g, ''))
                     }
                     placeholder="Auto-generated node name"
                   />

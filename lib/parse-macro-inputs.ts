@@ -57,6 +57,12 @@ const BOUNDARY_TYPE_MAP: Record<string, { label: string; dataType: string; descr
     },
   };
 
+/** Sanitize a node name for use as a JavaScript identifier in generated code.
+ *  "Source Actor" → "Source_Actor", "heal?target" → "heal_target". */
+function safeJsKey(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_$-]/g, '_');
+}
+
 /**
  * Analyze a child macro's node graph and extract input requirements.
  *
@@ -92,7 +98,7 @@ export function analyzeInputRequirements(command: string): MacroInputPort[] {
     const boundary = BOUNDARY_TYPE_MAP[type];
     if (boundary) {
       ports.push({
-        id: nodeName,
+        id: safeJsKey(nodeName),
         label: nodeName,
         dataType: boundary.dataType,
         description: boundary.description,
@@ -105,7 +111,7 @@ export function analyzeInputRequirements(command: string): MacroInputPort[] {
       for (const portId of checkPorts) {
         // Only expose if this port is NOT already connected internally
         if (!hasDataPipe(node.id, portId)) {
-          const portKey = `${nodeName}-${portId}`;
+          const portKey = safeJsKey(`${nodeName}-${portId}`);
           ports.push({
             id: portKey,
             label: `${nodeName} ${portId}`,
