@@ -40,33 +40,31 @@ import {
   ChevronRight,
   Blocks,
   Puzzle,
-  Table2,
-  Volume2,
-  Image,
-  Crosshair,
-  Shield,
-  Skull,
-  Target,
-  Search,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { relay } from '@/lib/relay';
 import { getModuleMapping } from '@/lib/module-mappings';
-import { getNodeFields, type NodeFieldDef } from '@/lib/node-schemas';
 import {
   ExpressionEditor,
-  type ExpressionConfig,
   expressionConfigToCode,
+  type ExpressionConfig,
 } from '@/components/macros/expression-editor';
 import { edgeTypes } from '@/components/macros/data-edge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Dialog } from '@/components/ui/dialog';
-import { getNodeSchema } from '@/lib/node-schemas';
+import {
+  NODE_DEFINITIONS,
+  getNodeDefinition,
+  getNodeFields,
+  getNodeSchema,
+  type FieldDefinition,
+  type NodeCategory,
+  type CodeGenContext,
+  type PaletteItem,
+} from '@/lib/node-definitions';
 
 // ─── Types ──────────────────────────────────────────────────
-
-type NodeCategory = 'action' | 'logic' | 'data' | 'macro' | 'module';
 
 interface CustomNodeData {
   type: string;
@@ -123,15 +121,6 @@ interface CustomNodeData {
 type MacroNode = Node<CustomNodeData>;
 type MacroEdge = Edge;
 
-interface PaletteItem {
-  type: string;
-  label: string;
-  category: NodeCategory;
-  description: string;
-  icon?: React.ReactNode;
-  defaultData: Partial<CustomNodeData>;
-}
-
 interface RemoteMacro {
   uuid: string;
   id: string;
@@ -151,175 +140,6 @@ interface InstalledModule {
   authors?: string;
 }
 
-interface PaletteSection {
-  title: string;
-  icon?: React.ReactNode;
-  items: PaletteItem[];
-}
-
-// ─── Static palette items ───────────────────────────────────
-
-const staticPaletteItems: PaletteItem[] = [
-  // Actions
-  {
-    type: 'rollDice',
-    label: 'Roll Dice',
-    category: 'action',
-    description: 'Roll a dice formula',
-    icon: <Blocks className="h-3 w-3 text-blue-400" />,
-    defaultData: { formula: '1d20', flavor: '' },
-  },
-  {
-    type: 'dealDamage',
-    label: 'Deal Damage',
-    category: 'action',
-    description: 'Deal damage to selected token',
-    icon: <Crosshair className="h-3 w-3 text-red-400" />,
-    defaultData: { amount: '10' },
-  },
-  {
-    type: 'healTarget',
-    label: 'Heal Target',
-    category: 'action',
-    description: 'Heal selected token',
-    icon: <Crosshair className="h-3 w-3 text-green-400" />,
-    defaultData: { amount: '10' },
-  },
-  {
-    type: 'sendChat',
-    label: 'Send Chat',
-    category: 'action',
-    description: 'Send a message to chat',
-    icon: <Blocks className="h-3 w-3 text-cyan-400" />,
-    defaultData: { content: 'Hello!', mode: 'OOC' },
-  },
-  {
-    type: 'applyEffect',
-    label: 'Apply Effect',
-    category: 'action',
-    description: 'Apply an active effect',
-    icon: <Blocks className="h-3 w-3 text-yellow-400" />,
-    defaultData: { effectName: 'Burning', amount: '60' },
-  },
-  {
-    type: 'applyStatus',
-    label: 'Apply Status',
-    category: 'action',
-    description: 'Apply a status condition icon',
-    icon: <Shield className="h-3 w-3 text-orange-400" />,
-    defaultData: { statusId: 'poisoned' },
-  },
-  {
-    type: 'abilityCheck',
-    label: 'Ability Check',
-    category: 'action',
-    description: 'Roll an ability check',
-    icon: <Blocks className="h-3 w-3 text-indigo-400" />,
-    defaultData: { ability: 'str', flavor: '' },
-  },
-  {
-    type: 'skillCheck',
-    label: 'Skill Check',
-    category: 'action',
-    description: 'Roll a skill check',
-    icon: <Blocks className="h-3 w-3 text-indigo-400" />,
-    defaultData: { skill: 'prc', flavor: '' },
-  },
-  {
-    type: 'concentrationSave',
-    label: 'Concentration Save',
-    category: 'action',
-    description: 'Roll a concentration saving throw',
-    icon: <Shield className="h-3 w-3 text-purple-400" />,
-    defaultData: { damageAmount: '10' },
-  },
-  {
-    type: 'deathSave',
-    label: 'Death Save',
-    category: 'action',
-    description: 'Roll a death saving throw',
-    icon: <Skull className="h-3 w-3 text-red-400" />,
-    defaultData: {},
-  },
-  {
-    type: 'rollTable',
-    label: 'Roll Table',
-    category: 'action',
-    description: 'Roll on a random table',
-    icon: <Table2 className="h-3 w-3 text-amber-400" />,
-    defaultData: { tableName: '', tableId: '' },
-  },
-  {
-    type: 'playSound',
-    label: 'Play Sound',
-    category: 'action',
-    description: 'Play a sound from a playlist',
-    icon: <Volume2 className="h-3 w-3 text-emerald-400" />,
-    defaultData: { playlistName: '', soundName: '' },
-  },
-  {
-    type: 'toggleScene',
-    label: 'Toggle Scene',
-    category: 'action',
-    description: 'Switch to / activate a scene',
-    // eslint-disable-next-line jsx-a11y/alt-text -- lucide-react SVG icon, not HTML img
-    icon: <Image className="h-3 w-3 text-sky-400" />,
-    defaultData: { sceneName: '', sceneId: '' },
-  },
-  // Logic
-  {
-    type: 'condition',
-    label: 'Condition',
-    category: 'logic',
-    description: 'If/else branching',
-    icon: <Blocks className="h-3 w-3 text-amber-400" />,
-    defaultData: { condition: 'true', compareField: 'name', compareValue: '' },
-  },
-  // Data
-  {
-    type: 'variable',
-    label: 'Variable',
-    category: 'data',
-    description: 'Set or get a variable',
-    icon: <Blocks className="h-3 w-3 text-green-400" />,
-    defaultData: { name: 'myVar', value: '' },
-  },
-  // Search / Data Source nodes
-  {
-    type: 'searchActors',
-    label: 'Search Actors',
-    category: 'action',
-    description: 'Search for an actor by name',
-    icon: <Search className="h-3 w-3 text-sky-400" />,
-    defaultData: { actorQuery: '' },
-  },
-  {
-    type: 'searchTargets',
-    label: 'Search Targets',
-    category: 'action',
-    description: 'Get currently targeted tokens',
-    icon: <Target className="h-3 w-3 text-rose-400" />,
-    defaultData: {},
-  },
-  {
-    type: 'searchScenes',
-    label: 'Search Scenes',
-    category: 'action',
-    description: 'Get a scene by name',
-    // eslint-disable-next-line jsx-a11y/alt-text -- lucide-react SVG icon, not HTML img
-    icon: <Image className="h-3 w-3 text-teal-400" />,
-    defaultData: { sceneName: '' },
-  },
-  {
-    type: 'getActorHP',
-    label: 'Get Actor HP',
-    category: 'action',
-    description: 'Get HP & temp HP from selected token',
-    icon: <Shield className="h-3 w-3 text-emerald-400" />,
-    defaultData: {},
-  },
-];
-
 // ─── Node Component ─────────────────────────────────────────
 
 const categoryColors: Record<NodeCategory, string> = {
@@ -332,7 +152,8 @@ const categoryColors: Record<NodeCategory, string> = {
 
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
   const isCondition = data.type === 'condition';
-  const dataPorts = NODE_DATA_PORTS[data.type] || [];
+  const def = getNodeDefinition(data.type);
+  const dataPorts = def?.ports || [];
 
   const dataTypeColor: Record<string, string> = {
     any: '!border-cyan-400 !bg-cyan-900/60',
@@ -544,106 +365,6 @@ interface Props {
   onNodeGraphChange?: (nodes: unknown[], edges: unknown[]) => void;
 }
 
-// ─── Helpers ────────────────────────────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for reference, used in future dynamic UI
-const MODE_OPTIONS = ['OOC', 'IC', 'EMOTE', 'WHISPER'] as const;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for reference, used in future dynamic UI
-const ABILITY_OPTIONS = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for reference, used in future dynamic UI
-const SKILL_OPTIONS = [
-  { value: 'acr', label: 'Acrobatics (DEX)' },
-  { value: 'ath', label: 'Athletics (STR)' },
-  { value: 'ste', label: 'Stealth (DEX)' },
-  { value: 'prc', label: 'Perception (WIS)' },
-  { value: 'inv', label: 'Investigation (INT)' },
-  { value: 'ins', label: 'Insight (WIS)' },
-  { value: 'dec', label: 'Deception (CHA)' },
-  { value: 'per', label: 'Persuasion (CHA)' },
-  { value: 'arc', label: 'Arcana (INT)' },
-  { value: 'his', label: 'History (INT)' },
-  { value: 'nat', label: 'Nature (INT)' },
-  { value: 'rel', label: 'Religion (INT)' },
-  { value: 'med', label: 'Medicine (WIS)' },
-  { value: 'ani', label: 'Animal Handling (WIS)' },
-  { value: 'sur', label: 'Survival (WIS)' },
-  { value: 'perf', label: 'Performance (CHA)' },
-  { value: 'int', label: 'Intimidation (CHA)' },
-] as const;
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for reference, used in future dynamic UI
-const STATUS_OPTIONS = [
-  { id: 'blinded', label: 'Blinded' },
-  { id: 'charmed', label: 'Charmed' },
-  { id: 'deafened', label: 'Deafened' },
-  { id: 'exhaustion', label: 'Exhaustion' },
-  { id: 'frightened', label: 'Frightened' },
-  { id: 'grappled', label: 'Grappled' },
-  { id: 'incapacitated', label: 'Incapacitated' },
-  { id: 'invisible', label: 'Invisible' },
-  { id: 'paralyzed', label: 'Paralyzed' },
-  { id: 'petrified', label: 'Petrified' },
-  { id: 'poisoned', label: 'Poisoned' },
-  { id: 'prone', label: 'Prone' },
-  { id: 'restrained', label: 'Restrained' },
-  { id: 'stunned', label: 'Stunned' },
-  { id: 'unconscious', label: 'Unconscious' },
-  { id: 'concentration', label: 'Concentration' },
-];
-
-// ─── Data Port Definitions ──────────────────────────────
-// Each node type can have data inputs (left side) and data outputs (right side)
-// These connect to create data flow separate from execution flow
-
-interface DataPortDef {
-  id: string;
-  label: string;
-  type: 'input' | 'output';
-  dataType: 'any' | 'number' | 'string' | 'boolean' | 'actor' | 'token' | 'scene';
-}
-
-const NODE_DATA_PORTS: Record<string, DataPortDef[]> = {
-  // Data producers (outputs on right side)
-  rollDice: [{ id: 'result', label: 'Result', type: 'output', dataType: 'number' }],
-  variable: [{ id: 'value', label: 'Value', type: 'output', dataType: 'any' }],
-  searchActors: [{ id: 'actor', label: 'Actor', type: 'output', dataType: 'actor' }],
-  searchTargets: [{ id: 'target', label: 'Target', type: 'output', dataType: 'token' }],
-  searchScenes: [{ id: 'scene', label: 'Scene', type: 'output', dataType: 'scene' }],
-  getActorHP: [
-    { id: 'hp', label: 'HP', type: 'output', dataType: 'number' },
-    { id: 'maxHp', label: 'Max HP', type: 'output', dataType: 'number' },
-    { id: 'tempHp', label: 'Temp HP', type: 'output', dataType: 'number' },
-  ],
-  condition: [
-    { id: 'result', label: 'Result', type: 'output', dataType: 'boolean' },
-    { id: 'condition', label: 'Expression', type: 'input', dataType: 'string' },
-    { id: 'trueTarget', label: 'True Branch', type: 'output', dataType: 'any' },
-    { id: 'falseTarget', label: 'False Branch', type: 'output', dataType: 'any' },
-  ],
-  rollTable: [{ id: 'result', label: 'Result', type: 'output', dataType: 'string' }],
-
-  // Data consumers (inputs on left side)
-  dealDamage: [
-    { id: 'amount', label: 'Amount', type: 'input', dataType: 'number' },
-    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
-  ],
-  healTarget: [
-    { id: 'amount', label: 'Amount', type: 'input', dataType: 'number' },
-    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
-  ],
-  sendChat: [{ id: 'content', label: 'Content', type: 'input', dataType: 'string' }],
-  applyEffect: [
-    { id: 'effectName', label: 'Effect Name', type: 'input', dataType: 'string' },
-    { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
-  ],
-  applyStatus: [{ id: 'statusId', label: 'Status', type: 'input', dataType: 'string' }],
-  abilityCheck: [{ id: 'ability', label: 'Ability', type: 'input', dataType: 'string' }],
-  skillCheck: [{ id: 'skill', label: 'Skill', type: 'input', dataType: 'string' }],
-  concentrationSave: [{ id: 'damageAmount', label: 'Damage', type: 'input', dataType: 'number' }],
-  toggleScene: [{ id: 'scene', label: 'Scene', type: 'input', dataType: 'scene' }],
-  runMacro: [{ id: 'macroUuid', label: 'Macro', type: 'input', dataType: 'string' }],
-};
-
 // ─── Canvas Component ───────────────────────────────────────
 
 function FlowCanvas({
@@ -765,19 +486,30 @@ function FlowCanvas({
   }, []);
 
   // ─── Build palette sections ─────────────────────────────
-  const paletteSections = useMemo<PaletteSection[]>(() => {
-    const sections: PaletteSection[] = [
+  const paletteSections = useMemo(() => {
+    const sections: {
+      title: string;
+      icon?: React.ReactNode;
+      items: {
+        type: string;
+        label: string;
+        category: NodeCategory;
+        description: string;
+        icon?: React.ReactNode;
+        defaultData: Record<string, unknown>;
+      }[];
+    }[] = [
       {
         title: 'Actions',
-        items: staticPaletteItems.filter((i) => i.category === 'action'),
+        items: NODE_DEFINITIONS.filter((i) => i.category === 'action'),
       },
       {
         title: 'Logic',
-        items: staticPaletteItems.filter((i) => i.category === 'logic'),
+        items: NODE_DEFINITIONS.filter((i) => i.category === 'logic'),
       },
       {
         title: 'Data',
-        items: staticPaletteItems.filter((i) => i.category === 'data'),
+        items: NODE_DEFINITIONS.filter((i) => i.category === 'data'),
       },
     ];
 
@@ -791,14 +523,20 @@ function FlowCanvas({
             ({
               type: 'runMacro',
               label: m.name,
-              category: 'macro',
+              category: 'macro' as NodeCategory,
               description: `Run "${m.name}"`,
               defaultData: {
                 macroName: m.name,
                 macroUuid: m.uuid,
                 description: `Execute: ${m.name}`,
               },
-            }) as PaletteItem,
+            }) as {
+              type: string;
+              label: string;
+              category: NodeCategory;
+              description: string;
+              defaultData: Record<string, unknown>;
+            },
         ),
       });
     }
@@ -806,7 +544,14 @@ function FlowCanvas({
     // Foundry Modules section (using module-mappings)
     const activeModules = installedModules.filter((m) => m.active);
     if (activeModules.length > 0) {
-      const moduleItems: PaletteItem[] = [];
+      const moduleItems: {
+        type: string;
+        label: string;
+        category: string;
+        description: string;
+        icon?: React.ReactNode;
+        defaultData: Record<string, unknown>;
+      }[] = [];
 
       for (const mod of activeModules) {
         const mapping = getModuleMapping(mod.id);
@@ -864,7 +609,7 @@ function FlowCanvas({
         sections.push({
           title: `Foundry Modules (${activeModules.length})`,
           icon: <Puzzle className="h-3 w-3 text-pink-500" />,
-          items: moduleItems,
+          items: moduleItems as PaletteItem[],
         });
       }
     }
@@ -905,7 +650,7 @@ function FlowCanvas({
         const sourceNode = nodes.find((n) => n.id === connection.source);
         const portId = connection.sourceHandle?.replace('data-out-', '');
         if (sourceNode && portId) {
-          const portDefs = NODE_DATA_PORTS[sourceNode.data.type] || [];
+          const portDefs = getNodeDefinition(sourceNode.data.type)?.ports || [];
           const portDef = portDefs.find((p) => p.id === portId);
           if (portDef) dataType = portDef.dataType;
         }
@@ -1011,9 +756,8 @@ function FlowCanvas({
     function dataForInput(nodeId: string, fieldKey: string): string | null {
       const entry = dataInMap.get(`${nodeId}:${fieldKey}`);
       if (!entry) return null;
-      const sourcePortDef = (
-        NODE_DATA_PORTS[nodeMap.get(entry.sourceNodeId)?.data?.type || ''] || []
-      ).find((p) => p.id === entry.sourcePortId);
+      const sourceDef = getNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '');
+      const sourcePortDef = (sourceDef?.ports || []).find((p) => p.id === entry.sourcePortId);
       if (!sourcePortDef) return null;
       return dataVar(entry.sourceNodeId, entry.sourcePortId);
     }
@@ -1064,366 +808,63 @@ function FlowCanvas({
         return;
       }
 
-      // Built-in node types
-      switch (d.type) {
-        case 'rollDice': {
-          const formula = d.formula || '1d20';
-          lines.push(indent + '// Roll Dice: ' + formula + ' -> e.g. result: 17');
-          lines.push(indent + 'const roll = new Roll("' + esc(formula) + '")');
-          lines.push(indent + 'await roll.evaluate({ async: true })');
-          if (d.flavor) lines.push(indent + 'roll.toMessage({ flavor: "' + esc(d.flavor) + '" })');
-          lines.push(indent + 'const ' + dataVar(nodeId, 'result') + ' = roll.total');
-
-          break;
-        }
-        case 'dealDamage': {
-          const damount = fieldVal('amount', d.amount || '10');
-          const dmgAmountVal = '(' + damount + ')';
-          lines.push(indent + '// Deal Damage -> e.g. -10 HP, chat: "Goblin takes 10 damage."');
-          const targetExpr = fieldVal('target', 'token');
-          lines.push(indent + 'const dmgTarget = ' + targetExpr);
-          lines.push(indent + 'const actorRef = dmgTarget?.actor || dmgTarget');
-          lines.push(indent + 'if (actorRef) {');
-          lines.push(indent + '  let dmgTotal = ' + dmgAmountVal);
-          lines.push(indent + '  // Support dice formulas like 1d8+3');
-          lines.push(
-            indent + "  if (typeof dmgTotal === 'string' && /^\\d*d\\d/i.test(dmgTotal)) {",
-          );
-          lines.push(indent + '    const r = await new Roll(dmgTotal).evaluate({ async: true })');
-          lines.push(indent + '    dmgTotal = r.total');
-          lines.push(indent + '  }');
-          lines.push(indent + '  const cur = actorRef.system.attributes.hp.value || 0');
-          lines.push(indent + '  const newHp = Math.max(0, cur - dmgTotal)');
-          lines.push(indent + '  await actorRef.update({ "system.attributes.hp.value": newHp })');
-          lines.push(
-            indent +
-              '  ChatMessage.create({ content: (dmgTarget.name || actorRef.name) + " takes " + dmgTotal + " damage." })',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'healTarget': {
-          const hamount = fieldVal('amount', d.amount || '10');
-          const healAmountVal = '(' + hamount + ')';
-          lines.push(indent + '// Heal Target -> e.g. +10 HP, chat shows name heals for amount.');
-          const htargetExpr = fieldVal('target', 'token');
-          lines.push(indent + 'const healTarget_ = ' + htargetExpr);
-          lines.push(indent + 'const hActorRef = healTarget_?.actor || healTarget_');
-          lines.push(indent + 'if (hActorRef) {');
-          lines.push(indent + '  const cur = hActorRef.system.attributes.hp.value || 0');
-          lines.push(indent + '  const max = hActorRef.system.attributes.hp.max || 999');
-          lines.push(indent + '  const newHp = Math.min(max, cur + ' + healAmountVal + ')');
-          lines.push(indent + '  await hActorRef.update({ "system.attributes.hp.value": newHp })');
-          lines.push(
-            indent +
-              '  ChatMessage.create({ content: (healTarget_.name || hActorRef.name) + " heals for " + ' +
-              healAmountVal +
-              ' + "." })',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'sendChat': {
-          const content = fieldVal('content', String(d.content || ''));
-          const mode = d.mode === 'IC' ? 'IC' : 'OOC';
-          lines.push(indent + '// Send Chat Message -> e.g. OOC: The goblin collapses!');
-          lines.push(indent + 'ChatMessage.create({');
-          lines.push(indent + '  content: String(' + content + '),');
-          lines.push(indent + '  type: CONST.CHAT_MESSAGE_TYPES.' + mode + ',');
-          lines.push(indent + '})');
-
-          break;
-        }
-        case 'applyEffect': {
-          const effectName = fieldVal('effectName', String(d.effectName || ''));
-          const targetExpr = fieldVal('target', 'token');
-          const dur = d.amount || '60';
-          lines.push(indent + '// Apply Effect -> e.g. applies Burning for 60s to selected token');
-          lines.push(indent + 'const applyTarget = ' + targetExpr);
-          lines.push(indent + 'const applyActor = applyTarget?.actor || applyTarget');
-          lines.push(indent + 'if (applyActor) {');
-          lines.push(indent + '  const effectData = {');
-          lines.push(indent + '    label: String(' + effectName + '),');
-          lines.push(indent + '    origin: applyActor.uuid,');
-          lines.push(indent + '    duration: { seconds: ' + (parseInt(dur) || 60) + ' }');
-          lines.push(indent + '  }');
-          lines.push(
-            indent + '  await applyActor.createEmbeddedDocuments("ActiveEffect", [effectData])',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'applyStatus': {
-          const statusId = fieldVal('statusId', String(d.statusId || 'poisoned'));
-          lines.push(indent + '// Apply Status -> e.g. toggles poisoned icon on selected token');
-          lines.push(indent + 'if (token) {');
-          lines.push(
-            indent +
-              '  await token.actor.toggleStatusEffect(String(' +
-              statusId +
-              '), { active: true })',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'condition': {
-          // Check if there's an expression config stored on the node
-          const rawExprCfg = String(d._exprConfig_condition || '');
-          let exprCode: string | null = null;
-          if (rawExprCfg) {
-            try {
-              const parsedConfig: ExpressionConfig = JSON.parse(rawExprCfg);
-              exprCode = expressionConfigToCode(
-                parsedConfig,
-                nodeId,
-                nodes.map((n) => ({
-                  id: n.id,
-                  data: n.data as unknown as Record<string, unknown>,
-                })),
-              );
-            } catch {}
-          }
-          if (exprCode) {
-            lines.push(indent + `// Condition -> Expression Builder: ${exprCode}`);
-            lines.push(indent + `if (${exprCode}) {`);
-          } else {
-            // Fallback: raw expression text or data pipe
-            const pipedVar = dataForInput(nodeId, 'condition');
-            const cond = pipedVar || fieldVal('condition', String(d.condition || 'true'));
-            lines.push(indent + '// Condition -> e.g. if (rollTotal > 10) { ... } else { ... }');
-            lines.push(indent + 'if (' + cond + ') {');
-          }
-          const trueEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'true');
-          for (const te of trueEdges) {
-            generateNodeLines(te.target, lines, depth + 1);
-          }
-          const falseEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'false');
-          if (falseEdges.length > 0) {
-            lines.push(indent + '} else {');
-            for (const fe of falseEdges) {
-              generateNodeLines(fe.target, lines, depth + 1);
-            }
-          }
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'variable': {
-          const varName = String(d.name || 'myVar');
-          const varValue = String(d.value || '');
-          const safeValue = varValue || 'undefined';
-          lines.push(indent + '// Variable: ' + varName + ' -> e.g. const ' + varName + ' = 42');
-          lines.push(indent + 'const ' + varName + ' = ' + safeValue);
-          lines.push(indent + 'const ' + dataVar(nodeId, 'value') + ' = ' + varName);
-
-          break;
-        }
-        case 'runMacro': {
-          const macroName = d.macroName || '';
-          lines.push(
-            indent + '// Run Macro: ' + macroName + ' -> executes Fireball from Foundry macros',
-          );
-          const macroRef = fieldVal('macroUuid', '');
-          if (macroRef && macroRef !== macroName) {
-            lines.push(indent + 'game.macros.get("' + esc(macroRef) + '")?.execute()');
-          } else if (macroName) {
-            lines.push(indent + 'game.macros.getName("' + esc(macroName) + '")?.execute()');
-          }
-
-          break;
-        }
-        case 'abilityCheck': {
-          const ability = fieldVal('ability', d.ability || 'str');
-          const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : '';
-          lines.push(
-            indent + '// Ability Check -> e.g. STR check: d20 + modifier, result shown in chat',
-          );
-          lines.push(indent + 'if (token) {');
-          lines.push(
-            indent + '  await token.actor.rollAbilityTest(String(' + ability + ')' + flavors + ')',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'skillCheck': {
-          const skill = fieldVal('skill', d.skill || 'prc');
-          const flavors = d.flavor ? ', { flavor: "' + esc(d.flavor) + '" }' : '';
-          lines.push(
-            indent + '// Skill Check -> e.g. Perception check: d20 + WIS, result shown in chat',
-          );
-          lines.push(indent + 'if (token) {');
-          lines.push(
-            indent + '  await token.actor.rollSkill(String(' + skill + ')' + flavors + ')',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'concentrationSave': {
-          const dmg = fieldVal('damageAmount', d.damageAmount || '10');
-          lines.push(indent + '// Concentration Save -> e.g. DC 10 CON save for 14 damage taken');
-          lines.push(indent + 'if (token) {');
-          lines.push(indent + '  await token.actor.rollConcentrationSave(Number(' + dmg + '))');
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'deathSave': {
-          lines.push(indent + '// Death Save -> e.g. d20 roll, success/fail tracked automatically');
-          lines.push(indent + 'if (token) {');
-          lines.push(indent + '  await token.actor.rollDeathSave({})');
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'rollTable': {
-          const tableName = d.tableName || '';
-          const tableId = d.tableId || '';
-          lines.push(
-            indent +
-              '// Roll Table: ' +
-              (tableName || tableId) +
-              ' -> e.g. rolled: Potion of Healing',
-          );
-          const tableRef = tableName
-            ? 'game.tables.getName("' + esc(tableName) + '")'
-            : tableId
-              ? 'game.tables.get("' + esc(tableId) + '")'
-              : 'null';
-          lines.push(indent + 'const table = ' + tableRef);
-          lines.push(indent + 'if (table) {');
-          lines.push(indent + '  const rollResult = await table.roll()');
-          lines.push(
-            indent +
-              '  const ' +
-              dataVar(nodeId, 'result') +
-              ' = rollResult?.results?.[0]?.text || ""',
-          );
-          lines.push(indent + '}');
-
-          break;
-        }
-        case 'playSound': {
-          const playlistName = d.playlistName || '';
-          const soundName = d.soundName || '';
-          lines.push(
-            indent + '// Play Sound -> e.g. plays Thunderclap from Battle Themes playlist',
-          );
-          if (playlistName && soundName) {
-            lines.push(
-              indent + 'const playlist = game.playlists.getName("' + esc(playlistName) + '")',
+      // Built-in node types — use registry codeGen for all except condition
+      if (d.type === 'condition') {
+        // Condition: special handler because it needs execEdgeMap for true/false branching
+        const rawExprCfg = String(d._exprConfig_condition || '');
+        let exprCode: string | null = null;
+        if (rawExprCfg) {
+          try {
+            const parsedConfig: unknown = JSON.parse(rawExprCfg);
+            exprCode = expressionConfigToCode(
+              parsedConfig as ExpressionConfig,
+              nodeId,
+              nodes.map((n) => ({
+                id: n.id,
+                data: n.data as unknown as Record<string, unknown>,
+              })),
             );
-            lines.push(indent + 'if (playlist) {');
-            lines.push(
-              indent + '  const sound = playlist.sounds.getName("' + esc(soundName) + '")',
-            );
-            lines.push(indent + '  if (sound) sound.play()');
-            lines.push(indent + '}');
-          } else if (playlistName) {
-            lines.push(
-              indent + 'const playlist = game.playlists.getName("' + esc(playlistName) + '")',
-            );
-            lines.push(indent + 'if (playlist) {');
-            lines.push(indent + '  playlist.play()');
-            lines.push(indent + '}');
+          } catch { /* ignore parse errors */ }
+        }
+        if (exprCode) {
+          lines.push(indent + '// Condition -> Expression Builder: ' + exprCode);
+          lines.push(indent + 'if (' + exprCode + ') {');
+        } else {
+          const pipedVar = dataForInput(nodeId, 'condition');
+          const cond = pipedVar || fieldVal('condition', String(d.condition || 'true'));
+          lines.push(indent + '// Condition -> e.g. if (rollTotal > 10) { ... } else { ... }');
+          lines.push(indent + 'if (' + cond + ') {');
+        }
+        const trueEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'true');
+        for (const te of trueEdges) {
+          generateNodeLines(te.target, lines, depth + 1);
+        }
+        const falseEdges = (execEdgeMap.get(nodeId) || []).filter((e) => e.handle === 'false');
+        if (falseEdges.length > 0) {
+          lines.push(indent + '} else {');
+          for (const fe of falseEdges) {
+            generateNodeLines(fe.target, lines, depth + 1);
           }
-
-          break;
         }
-        case 'toggleScene': {
-          const sceneRef = fieldVal('scene', '');
-          const sceneName = d.sceneName || '';
-          lines.push(
-            indent + '// Toggle Scene: ' + sceneName + ' -> e.g. activates The Dark Forest',
-          );
-          if (sceneRef) {
-            lines.push(indent + 'if (' + sceneRef + ') {');
-            lines.push(indent + '  await ' + sceneRef + '.activate()');
-            lines.push(indent + '}');
-          } else if (sceneName) {
-            lines.push(indent + 'const scene = game.scenes.getName("' + esc(sceneName) + '")');
-            lines.push(indent + 'if (scene) {');
-            lines.push(indent + '  await scene.activate()');
-            lines.push(indent + '}');
-          } else if (d.sceneId) {
-            lines.push(indent + 'const scene = game.scenes.get("' + esc(d.sceneId) + '")');
-            lines.push(indent + 'if (scene) {');
-            lines.push(indent + '  await scene.activate()');
-            lines.push(indent + '}');
+        lines.push(indent + '}');
+      } else {
+        // All other node types: use registry-based codeGen
+        const def = getNodeDefinition(d.type as string);
+        if (def?.codeGen) {
+          const ctx: CodeGenContext = {
+            nodeId,
+            d,
+            indent,
+            fieldVal: (fieldKey, fallback) => fieldVal(fieldKey, fallback),
+            dataVar: (portId) => dataVar(nodeId, portId),
+            dataForInput: (fieldKey) => dataForInput(nodeId, fieldKey),
+            esc: (s) => esc(s),
+          };
+          const codeLines = def.codeGen(ctx);
+          for (const cl of codeLines) {
+            lines.push(cl);
           }
-
-          break;
-        }
-        // Data source nodes (produce variables)
-        case 'searchActors': {
-          const query = d.actorQuery || '';
-          lines.push(
-            indent + '// Search Actors: ' + query + ' -> e.g. finds Gandalf actor by name',
-          );
-          lines.push(
-            indent +
-              'const ' +
-              dataVar(nodeId, 'actor') +
-              ' = ' +
-              (query
-                ? 'game.actors.getName("' +
-                  esc(query) +
-                  '") || canvas.tokens.placeables.find(t => t.name === "' +
-                  esc(query) +
-                  '")?.actor'
-                : 'game.user.targets.first()?.actor'),
-          );
-
-          break;
-        }
-        case 'searchTargets': {
-          lines.push(indent + '// Search Targets -> e.g. gets first targeted token on canvas');
-          lines.push(
-            indent + 'const ' + dataVar(nodeId, 'target') + ' = game.user.targets.first() || token',
-          );
-
-          break;
-        }
-        case 'searchScenes': {
-          const sName = d.sceneName || '';
-          lines.push(
-            indent + '// Search Scenes: ' + sName + ' -> e.g. finds The Dark Forest scene',
-          );
-          if (sName) {
-            lines.push(
-              indent +
-                'const ' +
-                dataVar(nodeId, 'scene') +
-                ' = game.scenes.getName("' +
-                esc(sName) +
-                '") || game.scenes.get("' +
-                esc(sName) +
-                '")',
-            );
-          } else {
-            lines.push(indent + 'const ' + dataVar(nodeId, 'scene') + ' = canvas.scene');
-          }
-
-          break;
-        }
-        case 'getActorHP': {
-          lines.push(indent + '// Get Actor HP -> e.g. returns hp: 42, maxHp: 50, tempHp: 5');
-          lines.push(indent + 'const hpActor = token?.actor');
-          lines.push(indent + 'if (hpActor) {');
-          lines.push(indent + '  const hpData = hpActor.system.attributes.hp');
-          lines.push(indent + '  const ' + dataVar(nodeId, 'hp') + ' = hpData.value');
-          lines.push(indent + '  const ' + dataVar(nodeId, 'maxHp') + ' = hpData.max');
-          lines.push(indent + '  const ' + dataVar(nodeId, 'tempHp') + ' = hpData.temp || 0');
-          lines.push(indent + '}');
-
-          break;
-        }
-        default: {
+        } else {
           lines.push(indent + '// Unknown node: ' + d.label + ' (' + d.type + ')');
         }
       }
@@ -1433,8 +874,22 @@ function FlowCanvas({
     lines.push('// Generated from node graph: ' + (macroName || 'Untitled Macro'));
     lines.push('');
     lines.push('async function executeMacro() {');
-    lines.push('  const token = canvas.tokens.controlled[0]');
-    lines.push('  if (!token) { ui.notifications.warn("Select a token first"); return }');
+
+    // Smart token guard: scan graph to determine if/how token is needed
+    const hasControlled = nodes.some((n) => {
+      const nd = getNodeDefinition(n.data.type as string);
+      return nd?.actorSource === 'controlled';
+    });
+    const hasPipedToken = nodes.some((n) => {
+      const nd = getNodeDefinition(n.data.type as string);
+      return nd?.actorSource === 'piped-token';
+    });
+    if (hasControlled) {
+      lines.push('  const token = canvas.tokens.controlled[0]');
+      lines.push('  if (!token) { ui.notifications.warn("Select a token first"); return }');
+    } else if (hasPipedToken) {
+      lines.push('  const token = canvas.tokens.controlled[0]');
+    }
 
     const hasIncoming = new Set<string>();
     edges.forEach((e) => {
@@ -1720,7 +1175,7 @@ function FlowCanvas({
                 {(() => {
                   // Determine fields for this node
                   const modId = String(selectedNodeData.moduleId || '');
-                  let fieldDefs: NodeFieldDef[];
+                  let fieldDefs: FieldDefinition[];
 
                   if (modId) {
                     // Module-mapped nodes: get fields from module mapping
@@ -1887,8 +1342,9 @@ function FlowCanvas({
           {detailsDialogNode &&
             (() => {
               const nd = detailsDialogNode.data;
+              const def = getNodeDefinition(nd.type);
               const schema = getNodeSchema(nd.type);
-              const dataPorts = NODE_DATA_PORTS[nd.type] || [];
+              const dataPorts = def?.ports || [];
               const outputPorts = dataPorts.filter((p) => p.type === 'output');
               const inputPorts = dataPorts.filter((p) => p.type === 'input');
               const example = schema?.example;
