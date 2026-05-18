@@ -75,7 +75,6 @@ export function analyzeInputRequirements(command: string): MacroInputPort[] {
   if (!graph) return [];
 
   const ports: MacroInputPort[] = [];
-  const seenTypes = new Set<string>();
 
   // Edge helper: check if a specific input port on a node has a data connection
   function hasDataPipe(nodeId: string, portId: string): boolean {
@@ -86,13 +85,15 @@ export function analyzeInputRequirements(command: string): MacroInputPort[] {
     const type = node.data?.type as string | undefined;
     if (!type) continue;
 
+    // Compute the node's unique name (auto-generated, user-editable)
+    const nodeName = (node.data?.nodeName as string) || type;
+
     // ── Boundary nodes (searchActors, searchTargets, rollDice) ──
     const boundary = BOUNDARY_TYPE_MAP[type];
-    if (boundary && !seenTypes.has(type)) {
-      seenTypes.add(type);
+    if (boundary) {
       ports.push({
-        id: type,
-        label: boundary.label,
+        id: nodeName,
+        label: nodeName,
         dataType: boundary.dataType,
         description: boundary.description,
       });
@@ -104,26 +105,17 @@ export function analyzeInputRequirements(command: string): MacroInputPort[] {
       for (const portId of checkPorts) {
         // Only expose if this port is NOT already connected internally
         if (!hasDataPipe(node.id, portId)) {
-          const portKey = `${type}-${portId}`;
-          if (!seenTypes.has(portKey)) {
-            seenTypes.add(portKey);
-            ports.push({
-              id: portKey,
-              label: `${type} ${portId}`,
-              dataType: 'token',
-              description: `Override the '${portId}' for ${type}`,
-            });
-          }
+          const portKey = `${nodeName}-${portId}`;
+          ports.push({
+            id: portKey,
+            label: `${nodeName} ${portId}`,
+            dataType: 'token',
+            description: `Override the '${portId}' for ${type} '${nodeName}'`,
+          });
         }
       }
     }
   }
 
-  // Deduplicate by ID (in case multiple nodes of same type)
-  const seen = new Set<string>();
-  return ports.filter((p) => {
-    if (seen.has(p.id)) return false;
-    seen.add(p.id);
-    return true;
-  });
+  return ports;
 }

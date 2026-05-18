@@ -71,6 +71,7 @@ import type { MacroInputPort } from '@/lib/parse-macro-inputs';
 interface CustomNodeData {
   type: string;
   label: string;
+  nodeName: string;
   category: NodeCategory;
   description: string;
   // roll dice
@@ -265,11 +266,16 @@ function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected
 
       <div className="flex items-center gap-2">
         <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <div>
+        <div className="min-w-0">
           <div className="text-xs font-semibold">{data.label}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">
             {data.description || data.type}
           </div>
+          {data.nodeName && (
+            <div className="text-[9px] text-gray-500 mt-0.5 truncate max-w-full">
+              {data.nodeName}
+            </div>
+          )}
         </div>
       </div>
       {/* Data Outputs (right side) */}
@@ -687,6 +693,9 @@ function FlowCanvas({
     [setEdges, nodes],
   );
 
+  // Ref for per-type instance counters (auto-naming)
+  const instanceCountersRef = useRef<Record<string, number>>({});
+
   const addNodeToCanvas = useCallback(
     (item: PaletteItem) => {
       const id = `node-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -695,6 +704,11 @@ function FlowCanvas({
         y: window.innerHeight / 2 + Math.random() * 200 - 100,
       }) || { x: 250, y: 150 };
 
+      // Auto-generate a unique name for this node
+      const typeKey = item.type;
+      instanceCountersRef.current[typeKey] = (instanceCountersRef.current[typeKey] || 0) + 1;
+      const autoName = `${item.type}_${instanceCountersRef.current[typeKey]}`;
+
       const newNode: MacroNode = {
         id,
         type: 'macroNode',
@@ -702,6 +716,7 @@ function FlowCanvas({
         data: {
           type: item.type,
           label: item.label,
+          nodeName: autoName,
           category: item.category,
           description: item.description,
           ...item.defaultData,
@@ -1100,7 +1115,7 @@ function FlowCanvas({
   }, [nodes, edges, onNodeGraphChange]);
 
   return (
-    <div className="flex h-full">
+    <div className="flex flex-1 min-h-0">
       {/* Palette sidebar */}
       <div className="w-56 shrink-0 border-r bg-muted/10 flex flex-col overflow-y-auto p-3">
         {paletteSections.map((section) => {
@@ -1234,6 +1249,18 @@ function FlowCanvas({
                 <span className="text-[10px] text-muted-foreground font-normal">Properties</span>
               </div>
               <div className="space-y-3">
+                {/* Node name field — always shown, at the top */}
+                <div>
+                  <Label className="text-xs">Node Name</Label>
+                  <Input
+                    className="h-8 text-xs mt-0.5"
+                    value={(selectedNodeData.nodeName as string) || ''}
+                    onChange={(e) =>
+                      updateNodeData(selectedNode!, 'nodeName', e.target.value)
+                    }
+                    placeholder="Auto-generated node name"
+                  />
+                </div>
                 {(() => {
                   // Determine fields for this node
                   // Get field definitions from registry (built-in or module)

@@ -287,9 +287,10 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     example: { result: 17 },
     codeGen: ({ d, indent, dataVar, esc }) => {
       const formula = String(d.formula || '1d20');
+      const nodeName = String(d.nodeName || 'rollDice');
       return [
         indent + '// Roll Dice',
-        indent + 'const __formula = __args?.rollDice || "' + esc(formula) + '"',
+        indent + 'const __formula = __args?.' + nodeName + ' || "' + esc(formula) + '"',
         indent + 'const roll = new Roll(__formula)',
         indent + 'await roll.evaluate({ async: true })',
         ...(d.flavor ? [indent + 'roll.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
@@ -1001,9 +1002,10 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     example: { name: 'Gandalf', type: 'npc', level: 20, hp: 85, maxHp: 85, armorClass: 15 },
     codeGen: ({ d, indent, dataVar, esc }) => {
       const query = String(d.actorQuery || '');
+      const nodeName = String(d.nodeName || 'searchActors');
       return [
         indent + '// Search Actors',
-        indent + 'const ' + dataVar('actor') + ' = __args?.searchActors || ' + (query
+        indent + 'const ' + dataVar('actor') + ' = __args?.' + nodeName + ' || ' + (query
           ? 'game.actors.getName("' + esc(query) + '") || canvas.tokens.placeables.find(t => t.name === "' + esc(query) + '")?.actor'
           : 'game.user.targets.first()?.actor'),
       ];
@@ -1029,10 +1031,11 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
       },
     ],
     example: { name: 'Goblin Archer', x: 1200, y: 800, elevation: 0 },
-    codeGen: ({ indent, dataVar }) => {
+    codeGen: ({ indent, dataVar, d }) => {
+      const nodeName = String(d.nodeName || 'searchTargets');
       return [
         indent + '// Search Targets',
-        indent + 'const ' + dataVar('target') + ' = __args?.searchTargets || game.user.targets.first() || token',
+        indent + 'const ' + dataVar('target') + ' = __args?.' + nodeName + ' || game.user.targets.first() || token',
       ];
     },
   },
