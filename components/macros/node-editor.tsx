@@ -542,6 +542,10 @@ function FlowCanvas({
         title: 'Data',
         items: NODE_DEFINITIONS.filter((i) => i.category === 'data'),
       },
+      {
+        title: 'Macros',
+        items: NODE_DEFINITIONS.filter((i) => i.category === 'macro'),
+      },
     ];
 
     // Foundry Macros section (dynamic from relay)
