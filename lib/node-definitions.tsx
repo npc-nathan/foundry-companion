@@ -298,7 +298,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         indent + '// Roll Dice',
         indent + 'const __formula = __args?.' + nodeName + ' || "' + esc(formula) + '"',
         indent + 'const roll = new Roll(__formula)',
-        indent + 'await roll.evaluate({ async: true })',
+        indent + 'await roll.evaluate()',
         ...(d.flavor ? [indent + 'roll.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
         indent + 'const ' + dataVar('roll_object') + ' = roll',
         indent + 'const ' + dataVar('result') + ' = roll.total',
@@ -360,7 +360,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         indent + '  let dmgTotal = ' + dmgAmountVal,
         indent + '  // Support dice formulas like 1d8+3',
         indent + "  if (typeof dmgTotal === 'string' && /^\\d*d\\d/i.test(dmgTotal)) {",
-        indent + '    const r = await new Roll(dmgTotal).evaluate({ async: true })',
+        indent + '    const r = await new Roll(dmgTotal).evaluate()',
         indent + '    dmgTotal = r.total',
         indent + '  }',
         indent + '  const cur = dmgTargetActor.system.attributes.hp.value || 0',
@@ -1183,9 +1183,9 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
       }
 
       if (macroRef && macroRef !== macroName) {
-        lines.push(indent + 'game.macros.get("' + esc(macroRef) + '")?.execute()');
+        lines.push(indent + 'await game.macros.get("' + esc(macroRef) + '")?.execute()');
       } else if (macroName) {
-        lines.push(indent + 'game.macros.getName("' + esc(macroName) + '")?.execute()');
+        lines.push(indent + 'await game.macros.getName("' + esc(macroName) + '")?.execute()');
       }
 
       if (argEntries.length > 0) {
