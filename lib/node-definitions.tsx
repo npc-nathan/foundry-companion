@@ -24,6 +24,7 @@ import {
   Puzzle,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { getModuleNodeDefinition } from '@/lib/module-mappings';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export interface PortDefinition {
   id: string;
   label: string;
   type: 'input' | 'output';
-  dataType: 'any' | 'number' | 'string' | 'boolean' | 'actor' | 'token' | 'scene';
+  dataType: 'any' | 'number' | 'string' | 'boolean' | 'actor' | 'token' | 'scene' | 'roll';
 }
 
 export type FieldDefType = 'text' | 'number' | 'select' | 'expression';
@@ -51,7 +52,7 @@ export interface FieldDefinition {
   hideFromPanel?: boolean;
 }
 
-export type SchemaFieldType = 'string' | 'number' | 'boolean' | 'actor' | 'token' | 'scene' | 'object';
+export type SchemaFieldType = 'string' | 'number' | 'boolean' | 'actor' | 'token' | 'scene' | 'object' | 'roll';
 
 export interface PaletteItem {
   type: string;
@@ -92,6 +93,8 @@ export interface NodeDefinition {
   category: NodeCategory;
   description: string;
   icon: ReactNode;
+  /** Module ID if this is a module node (e.g. 'dfreds-convenient-effects') */
+  moduleId?: string;
   defaultData: Record<string, unknown>;
   ports: PortDefinition[];
   fields: FieldDefinition[];
@@ -244,7 +247,10 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     icon: <Blocks className="h-3 w-3 text-blue-400" />,
     defaultData: { formula: '1d20', flavor: '' },
     actorSource: 'none',
-    ports: [{ id: 'result', label: 'Result', type: 'output', dataType: 'number' }],
+    ports: [
+      { id: 'result', label: 'Result', type: 'output', dataType: 'number' },
+      { id: 'roll_object', label: 'Roll Object', type: 'output', dataType: 'roll' },
+    ],
     fields: [
       {
         key: 'formula',
@@ -270,6 +276,12 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         portType: 'number',
         fields: [{ key: '', label: 'Roll Total', type: 'number', path: '' }],
       },
+      {
+        portId: 'roll_object',
+        portLabel: 'Roll Object',
+        portType: 'roll',
+        fields: [],
+      },
     ],
     example: { result: 17 },
     codeGen: ({ d, indent, dataVar, esc }) => {
@@ -279,6 +291,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         indent + 'const roll = new Roll("' + esc(formula) + '")',
         indent + 'await roll.evaluate({ async: true })',
         ...(d.flavor ? [indent + 'roll.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
+        indent + 'const ' + dataVar('roll_object') + ' = roll',
         indent + 'const ' + dataVar('result') + ' = roll.total',
       ];
     },
@@ -1188,7 +1201,10 @@ export function getNodeFields(
     }));
   }
   const def = defMap.get(nodeType);
-  return def?.fields || [];
+  if (def?.fields) return def.fields;
+  // Check module node definitions if not found in built-in registry
+  const modDef = getModuleNodeDefinition?.(nodeType);
+  return modDef?.fields || [];
 }
 
 export function getNodeSchema(type: string): {

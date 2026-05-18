@@ -1,57 +1,31 @@
 /**
  * Module Mappings — Known Foundry module API templates
  *
+ * Each module node is defined as a full NodeDefinition with proper
+ * ports, fields, actorSource, and codeGen — same format as built-in nodes.
+ * This lets module nodes participate in data piping, token guard scanning,
+ * and expression editor support.
+ *
  * Maps module IDs to their known Foundry-side JavaScript APIs.
  * This is a living file. Contributions welcome for new modules.
- *
- * Each mapping defines:
- *  - label: Display name in the palette
- *  - description: Tooltip description
- *  - docs: URL to module docs (optional)
- *  - nodes: Array of node type definitions with property schemas
- *    and generateCode functions that emit real Foundry API calls
  */
 
-// ─── Types ──────────────────────────────────────────────────
+import type { NodeDefinition, CodeGenContext } from '@/lib/node-definitions';
 
-export interface ModuleNodeProperty {
-  key: string;
-  label: string;
-  type: 'text' | 'select' | 'number' | 'actor';
-  placeholder?: string;
-  /** For 'select' type: static options */
-  options?: { value: string; label: string }[];
-  /** For 'select' type: fetch from relay at mount */
-  dynamicSource?: 'actors' | 'macros' | 'scenes' | 'playlists' | 'tables' | 'effects';
+// ─── Helper functions for code gen ────────────────────
+
+function fieldTokens(ctx: CodeGenContext): string[] {
+  const { fieldVal, indent } = ctx;
+  const targetExpr = fieldVal('target', 'token');
+  return [
+    indent + `const targetToken = ${targetExpr}`,
+    indent + `const targetActor = targetToken?.actor || targetToken`,
+  ];
 }
-
-export interface ModuleNodeDef {
-  type: string;
-  label: string;
-  description: string;
-  properties: ModuleNodeProperty[];
-  /** Generate the Foundry JavaScript code for this node */
-  generateCode: (data: Record<string, string>) => string[];
-}
-
-export interface ModuleMapping {
-  id: string;
-  label: string;
-  description: string;
-  docs?: string;
-  nodes: ModuleNodeDef[];
-}
-
-// ─── Helper: sanitize strings for code gen ──────────────────
-
-const esc = (s: string) => s.replace(/"/g, '\\"');
-const intVal = (s: string | undefined, fallback = 0) =>
-  String(parseInt(s || String(fallback)) || fallback);
 
 // ─── DFreds Convenient Effects ──────────────────────────────
-// Docs: https://github.com/DFreds/dfreds-convenient-effects
 
-const CE_EFFECT_OPTIONS: { value: string; label: string }[] = [
+const CE_EFFECT_OPTIONS = [
   { value: 'Burning', label: 'Burning' },
   { value: 'Poisoned', label: 'Poisoned' },
   { value: 'Stunned', label: 'Stunned' },
@@ -73,693 +47,869 @@ const CE_EFFECT_OPTIONS: { value: string; label: string }[] = [
   { value: 'Bless', label: 'Bless' },
 ];
 
-const dfredsCE: ModuleMapping = {
-  id: 'dfreds-convenient-effects',
-  label: 'DFreds Convenient Effects',
-  description: 'Pre-built status effects with automated mechanics',
-  docs: 'https://github.com/DFreds/dfreds-convenient-effects',
-  nodes: [
-    {
-      type: 'ce-apply-effect',
-      label: 'Apply CE Effect',
-      description: 'Apply a convenient effect to a token',
-      properties: [
-        {
-          key: 'effectName',
-          label: 'Effect Name',
-          type: 'select',
-          options: CE_EFFECT_OPTIONS,
-        },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
-        {
-          key: 'duration',
-          label: 'Duration (rounds, 0=unlimited)',
-          type: 'number',
-          placeholder: '0',
-        },
-      ],
-      generateCode: (d) => [
-        '// --- DFreds Convenient Effects: Apply (e.g. applies Burning to Goblin) ---',
-        d.effectName ? `const effectName = "${esc(d.effectName)}"` : 'const effectName = "Burning"',
-        d.target
-          ? `const targetToken = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const targetToken = token',
-        "if (!targetToken) { ui.notifications.warn('No target selected'); return }",
-        d.duration && parseInt(d.duration) > 0
-          ? `game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid, { seconds: ${
-              parseInt(d.duration) * 6
-            } })`
-          : 'game.dfreds.effects.addEffectOnTarget(effectName, targetToken.actor.uuid)',
-        'ui.notifications.info(`Applied ${effectName}`)',
-        '',
-      ],
+// ─── All module node definitions ───────────────────────────
+
+export const MODULE_NODE_DEFINITIONS: NodeDefinition[] = [
+  // ── DFreds Convenient Effects ──────────────────────────
+  {
+    type: 'ce-apply-effect',
+    label: 'Apply CE Effect',
+    category: 'module',
+    moduleId: 'dfreds-convenient-effects',
+    description: 'Apply a convenient effect to a token',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { effectName: 'Burning', target: '', duration: '0' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'effectName', label: 'Effect', type: 'input', dataType: 'string' },
+      { id: 'duration', label: 'Duration', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'effectName',
+        label: 'Effect Name',
+        type: 'select',
+        selectOptions: CE_EFFECT_OPTIONS,
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target',
+        type: 'number',
+        placeholder: '@token or Actor UUID',
+        displayOrder: 2,
+      },
+      {
+        key: 'duration',
+        label: 'Duration (rounds, 0=unlimited)',
+        type: 'number',
+        placeholder: '0',
+        displayOrder: 3,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const effectName = fieldVal('effectName', 'Burning');
+      const dur = fieldVal('duration', '0');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `const effectName = ${effectName}`);
+      lines.push(indent + `const dur = parseInt(String(${dur})) || 0`);
+      lines.push(indent + `if (dur > 0) {`);
+      lines.push(
+        indent +
+          `  game.dfreds.effects.addEffectOnTarget(effectName, targetActor.uuid, { seconds: dur * 6 })`,
+      );
+      lines.push(indent + `} else {`);
+      lines.push(indent + `  game.dfreds.effects.addEffectOnTarget(effectName, targetActor.uuid)`);
+      lines.push(indent + `}`);
+      lines.push(indent + `ui.notifications.info(\`Applied \${effectName}\`)`);
+      lines.push('');
+      return lines;
     },
-    {
-      type: 'ce-remove-effect',
-      label: 'Remove CE Effect',
-      description: 'Remove a convenient effect from a token',
-      properties: [
-        {
-          key: 'effectName',
-          label: 'Effect Name',
-          type: 'select',
-          options: CE_EFFECT_OPTIONS,
-        },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
-      ],
-      generateCode: (d) => [
-        '// --- DFreds Convenient Effects: Remove ---',
-        d.effectName ? `const effectName = "${esc(d.effectName)}"` : 'const effectName = "Burning"',
-        d.target
-          ? `const targetToken = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const targetToken = token',
-        "if (!targetToken) { ui.notifications.warn('No target selected'); return }",
-        'game.dfreds.effects.removeEffectFromTarget(effectName, targetToken.actor.uuid)',
-        'ui.notifications.info(`Removed ${effectName}`)',
-        '',
-      ],
+  },
+  {
+    type: 'ce-remove-effect',
+    label: 'Remove CE Effect',
+    category: 'module',
+    moduleId: 'dfreds-convenient-effects',
+    description: 'Remove a convenient effect from a token',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { effectName: 'Burning', target: '' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'effectName', label: 'Effect', type: 'input', dataType: 'string' },
+    ],
+    fields: [
+      {
+        key: 'effectName',
+        label: 'Effect Name',
+        type: 'select',
+        selectOptions: CE_EFFECT_OPTIONS,
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target',
+        type: 'text',
+        placeholder: '@token or Actor UUID',
+        displayOrder: 2,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const effectName = fieldVal('effectName', 'Burning');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(
+        indent + `game.dfreds.effects.removeEffectFromTarget(${effectName}, targetActor.uuid)`,
+      );
+      lines.push(indent + `ui.notifications.info(\`Removed \${${effectName}}\`)`);
+      lines.push('');
+      return lines;
     },
-  ],
-};
+  },
 
-// ─── DAE (Dynamic Active Effects) ────────────────────────────
-// Docs: https://gitlab.com/tposney/dae
-
-const dae: ModuleMapping = {
-  id: 'dae',
-  label: 'Dynamic Active Effects (DAE)',
-  description: 'Runtime active effect manipulation',
-  docs: 'https://gitlab.com/tposney/dae',
-  nodes: [
-    {
-      type: 'dae-apply-effect',
-      label: 'DAE: Apply Effect',
-      description: 'Apply a DAE effect to an actor',
-      properties: [
-        {
-          key: 'effectName',
-          label: 'Effect Name',
-          type: 'text',
-          placeholder: 'e.g. My Custom Effect',
-        },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
-        { key: 'duration', label: 'Duration (seconds)', type: 'number', placeholder: '60' },
-      ],
-      generateCode: (d) => [
-        '// --- DAE: Apply Effect ---',
-        `const effName = "${esc(d.effectName || '')}"`,
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        `await game.dae.applyEffect(effName, tgt.actor)`,
-        '',
-      ],
+  // ── DAE ────────────────────────────────────────────────
+  {
+    type: 'dae-apply-effect',
+    label: 'DAE: Apply Effect',
+    category: 'module',
+    moduleId: 'dae',
+    description: 'Apply a DAE effect to an actor',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { effectName: '', target: '', duration: '60' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'effectName', label: 'Effect Name', type: 'input', dataType: 'string' },
+      { id: 'duration', label: 'Duration', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'effectName',
+        label: 'Effect Name',
+        type: 'text',
+        placeholder: 'e.g. My Custom Effect',
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target',
+        type: 'text',
+        placeholder: '@token or Actor UUID',
+        displayOrder: 2,
+      },
+      {
+        key: 'duration',
+        label: 'Duration (seconds)',
+        type: 'number',
+        placeholder: '60',
+        displayOrder: 3,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const effName = fieldVal('effectName', '');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `await game.dae.applyEffect(${effName}, targetActor)`);
+      lines.push('');
+      return lines;
     },
-    {
-      type: 'dae-remove-effect',
-      label: 'DAE: Remove Effect',
-      description: 'Remove a DAE effect from an actor',
-      properties: [
-        {
-          key: 'effectName',
-          label: 'Effect Name',
-          type: 'text',
-          placeholder: 'e.g. My Custom Effect',
-        },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
-      ],
-      generateCode: (d) => [
-        '// --- DAE: Remove Effect ---',
-        `const effName = "${esc(d.effectName || '')}"`,
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        `await game.dae.removeEffect(effName, tgt.actor)`,
-        '',
-      ],
+  },
+  {
+    type: 'dae-remove-effect',
+    label: 'DAE: Remove Effect',
+    category: 'module',
+    moduleId: 'dae',
+    description: 'Remove a DAE effect from an actor',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { effectName: '', target: '' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'effectName', label: 'Effect Name', type: 'input', dataType: 'string' },
+    ],
+    fields: [
+      {
+        key: 'effectName',
+        label: 'Effect Name',
+        type: 'text',
+        placeholder: 'e.g. My Custom Effect',
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target',
+        type: 'text',
+        placeholder: '@token or Actor UUID',
+        displayOrder: 2,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const effName = fieldVal('effectName', '');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `await game.dae.removeEffect(${effName}, targetActor)`);
+      lines.push('');
+      return lines;
     },
-    {
-      type: 'dae-clear-effects',
-      label: 'DAE: Clear All Effects',
-      description: 'Remove all DAE effects from an actor',
-      properties: [
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token or Actor UUID' },
-      ],
-      generateCode: (d) => [
-        '// --- DAE: Clear All Effects ---',
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        'const effects = tgt.actor.effects.filter(e => !e.getFlag("core","statusId"))',
-        'for (const eff of effects) { await eff.delete(); }',
-        '',
-      ],
+  },
+  {
+    type: 'dae-clear-effects',
+    label: 'DAE: Clear All Effects',
+    category: 'module',
+    moduleId: 'dae',
+    description: 'Remove all DAE effects from an actor',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { target: '' },
+    ports: [{ id: 'target', label: 'Target', type: 'input', dataType: 'token' }],
+    fields: [
+      {
+        key: 'target',
+        label: 'Target',
+        type: 'text',
+        placeholder: '@token or Actor UUID',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { indent } = ctx;
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(
+        indent + `const effects = targetActor.effects.filter(e => !e.getFlag("core","statusId"))`,
+      );
+      lines.push(indent + `for (const eff of effects) { await eff.delete(); }`);
+      lines.push('');
+      return lines;
     },
-  ],
-};
+  },
 
-// ─── Sequencer ───────────────────────────────────────────────
-// Docs: https://github.com/fantasy-calendar/sequencer
-
-const sequencer: ModuleMapping = {
-  id: 'sequencer',
-  label: 'Sequencer',
-  description: 'Play animated visual effects and sequences',
-  docs: 'https://github.com/fantasy-calendar/sequencer/wiki',
-  nodes: [
-    {
-      type: 'seq-play-effect',
-      label: 'Sequencer: Play Effect',
-      description: 'Play a visual effect at a location',
-      properties: [
-        {
-          key: 'effectFile',
-          label: 'Effect File Path',
-          type: 'text',
-          placeholder: 'modules/jb2a_pack/...',
-        },
-        { key: 'target', label: 'Target Token', type: 'text', placeholder: '@token or name' },
-        { key: 'scale', label: 'Scale', type: 'number', placeholder: '1.0' },
-        { key: 'duration', label: 'Duration (ms)', type: 'number', placeholder: '2000' },
-      ],
-      generateCode: (d) => [
-        '// --- Sequencer: Play Effect ---',
-        `const file = "${esc(d.effectFile || '')}"`,
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        'if (!file) { ui.notifications.warn("No effect file specified"); return }',
-        `new Sequence()`,
-        `    .effect()`,
-        `    .file(file)`,
-        `    .atLocation(tgt.center)`,
-        d.scale ? `    .scale(${parseFloat(d.scale) || 1})` : '',
-        d.duration ? `    .duration(${intVal(d.duration, 2000)})` : '',
-        `    .play()`,
-        '',
-      ],
+  // ── Sequencer ──────────────────────────────────────────
+  {
+    type: 'seq-play-effect',
+    label: 'Sequencer: Play Effect',
+    category: 'module',
+    moduleId: 'sequencer',
+    description: 'Play a visual effect at a location',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { effectFile: '', target: '', scale: '1.0', duration: '2000' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'effectFile', label: 'File', type: 'input', dataType: 'string' },
+      { id: 'scale', label: 'Scale', type: 'input', dataType: 'number' },
+      { id: 'duration', label: 'Duration', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'effectFile',
+        label: 'Effect File Path',
+        type: 'text',
+        placeholder: 'modules/jb2a_pack/...',
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target Token',
+        type: 'text',
+        placeholder: '@token or name',
+        displayOrder: 2,
+      },
+      { key: 'scale', label: 'Scale', type: 'number', placeholder: '1.0', displayOrder: 3 },
+      {
+        key: 'duration',
+        label: 'Duration (ms)',
+        type: 'number',
+        placeholder: '2000',
+        displayOrder: 4,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const fileExpr = fieldVal('effectFile', '');
+      const scaleExpr = fieldVal('scale', '1.0');
+      const durationExpr = fieldVal('duration', '2000');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetToken) { ui.notifications.warn('No target'); return }`);
+      lines.push(
+        indent + `if (!${fileExpr}) { ui.notifications.warn("No effect file specified"); return }`,
+      );
+      lines.push(indent + `new Sequence()`);
+      lines.push(indent + `    .effect()`);
+      lines.push(indent + `    .file(${fileExpr})`);
+      lines.push(indent + `    .atLocation(targetToken.center)`);
+      lines.push(indent + `    .scale(parseFloat(String(${scaleExpr})) || 1)`);
+      lines.push(indent + `    .duration(parseInt(String(${durationExpr})) || 2000)`);
+      lines.push(indent + `    .play()`);
+      lines.push('');
+      return lines;
     },
-    {
-      type: 'seq-play-sound',
-      label: 'Sequencer: Play Sound',
-      description: 'Play a sound effect via Sequencer',
-      properties: [
-        {
-          key: 'soundFile',
-          label: 'Sound File Path',
-          type: 'text',
-          placeholder: 'modules/.../sound.ogg',
-        },
-        { key: 'target', label: 'Target Token', type: 'text', placeholder: '@token' },
-        { key: 'volume', label: 'Volume (0-1)', type: 'number', placeholder: '0.5' },
-      ],
-      generateCode: (d) => [
-        '// --- Sequencer: Play Sound ---',
-        `const sndFile = "${esc(d.soundFile || '')}"`,
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        'if (!sndFile) { ui.notifications.warn("No sound file specified"); return }',
-        `new Sequence()`,
-        `    .sound()`,
-        `    .file(sndFile)`,
-        `    .atLocation(tgt.center)`,
-        d.volume ? `    .volume(${parseFloat(d.volume) || 0.5})` : '',
-        `    .play()`,
-        '',
-      ],
+  },
+  {
+    type: 'seq-play-sound',
+    label: 'Sequencer: Play Sound',
+    category: 'module',
+    moduleId: 'sequencer',
+    description: 'Play a sound effect via Sequencer',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { soundFile: '', target: '', volume: '0.5' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'soundFile', label: 'Sound File', type: 'input', dataType: 'string' },
+      { id: 'volume', label: 'Volume', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'soundFile',
+        label: 'Sound File Path',
+        type: 'text',
+        placeholder: 'modules/.../sound.ogg',
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target Token',
+        type: 'text',
+        placeholder: '@token',
+        displayOrder: 2,
+      },
+      { key: 'volume', label: 'Volume (0-1)', type: 'number', placeholder: '0.5', displayOrder: 3 },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const sndFile = fieldVal('soundFile', '');
+      const volumeExpr = fieldVal('volume', '0.5');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetToken) { ui.notifications.warn('No target'); return }`);
+      lines.push(
+        indent + `if (!${sndFile}) { ui.notifications.warn("No sound file specified"); return }`,
+      );
+      lines.push(indent + `new Sequence()`);
+      lines.push(indent + `    .sound()`);
+      lines.push(indent + `    .file(${sndFile})`);
+      lines.push(indent + `    .atLocation(targetToken.center)`);
+      lines.push(indent + `    .volume(parseFloat(String(${volumeExpr})) || 0.5)`);
+      lines.push(indent + `    .play()`);
+      lines.push('');
+      return lines;
     },
-  ],
-};
+  },
 
-// ─── FXMaster ────────────────────────────────────────────────
-// Docs: https://github.com/ghost-fvtt/fxmaster
-
-const fxmaster: ModuleMapping = {
-  id: 'fxmaster',
-  label: "Gambit's FXMaster",
-  description: 'Weather effects, filters, and particle effects',
-  docs: 'https://github.com/ghost-fvtt/fxmaster',
-  nodes: [
-    {
-      type: 'fxm-weather',
-      label: 'FXMaster: Set Weather',
-      description: 'Set scene weather effect',
-      properties: [
-        {
-          key: 'weatherType',
-          label: 'Weather Type',
-          type: 'select',
-          options: [
-            { value: 'clear', label: 'None (Clear)' },
-            { value: 'rain', label: 'Rain' },
-            { value: 'snow', label: 'Snow' },
-            { value: 'fog', label: 'Fog' },
-            { value: 'clouds', label: 'Clouds' },
-            { value: 'lightning', label: 'Thunderstorm' },
-            { value: 'sandstorm', label: 'Sandstorm' },
-            { value: 'stars', label: 'Stars' },
-          ],
-        },
-        { key: 'intensity', label: 'Intensity (0-1)', type: 'number', placeholder: '0.5' },
-      ],
-      generateCode: (d) => [
-        '// --- FXMaster: Set Weather (e.g. rain, snow, thunderstorm) ---',
-        `const weather = "${esc(d.weatherType || 'clear')}"`,
-        'if (weather === "clear") {',
-        '  canvas.scene.update({"flags.fxmaster": {effects: []}})',
-        '} else {',
-        `  canvas.scene.update({"flags.fxmaster": {effects: [weather]}})`,
-        '}',
+  // ── FXMaster ────────────────────────────────────────────
+  {
+    type: 'fxm-weather',
+    label: 'FXMaster: Set Weather',
+    category: 'module',
+    moduleId: 'fxmaster',
+    description: 'Set scene weather effect',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { weatherType: 'clear', intensity: '0.5' },
+    ports: [],
+    fields: [
+      {
+        key: 'weatherType',
+        label: 'Weather Type',
+        type: 'select',
+        selectOptions: [
+          { value: 'clear', label: 'None (Clear)' },
+          { value: 'rain', label: 'Rain' },
+          { value: 'snow', label: 'Snow' },
+          { value: 'fog', label: 'Fog' },
+          { value: 'clouds', label: 'Clouds' },
+          { value: 'lightning', label: 'Thunderstorm' },
+          { value: 'sandstorm', label: 'Sandstorm' },
+          { value: 'stars', label: 'Stars' },
+        ],
+        displayOrder: 1,
+      },
+      {
+        key: 'intensity',
+        label: 'Intensity (0-1)',
+        type: 'number',
+        placeholder: '0.5',
+        displayOrder: 2,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const weather = fieldVal('weatherType', 'clear');
+      return [
+        indent + `// --- FXMaster: Set Weather ---`,
+        indent + `if (${weather} === "clear") {`,
+        indent + `  canvas.scene.update({"flags.fxmaster": {effects: []}})`,
+        indent + `} else {`,
+        indent + `  canvas.scene.update({"flags.fxmaster": {effects: [${weather}]}})`,
+        indent + `}`,
         '',
-      ],
+      ];
     },
-    {
-      type: 'fxm-filter',
-      label: 'FXMaster: Apply Filter',
-      description: 'Apply a visual filter to the scene',
-      properties: [
-        {
-          key: 'filterType',
-          label: 'Filter',
-          type: 'select',
-          options: [
-            { value: 'predator', label: 'Predator Vision' },
-            { value: 'underwater', label: 'Underwater' },
-            { value: 'dawn', label: 'Dawn' },
-            { value: 'dusk', label: 'Dusk' },
-            { value: 'night', label: 'Night' },
-            { value: 'sunlight', label: 'Sunlight' },
-            { value: 'moonlight', label: 'Moonlight' },
-            { value: 'cave', label: 'Cave' },
-          ],
-        },
-      ],
-      generateCode: (d) => [
-        '// --- FXMaster: Apply Filter (e.g. predator, underwater, night) ---',
-        `const filter = "${esc(d.filterType || '')}"`,
-        "if (!filter) { ui.notifications.warn('No filter selected'); return }",
-        'canvas.effects.filters.set(filter, true)',
-        'ui.notifications.info(`Applied ${filter} filter`)',
+  },
+  {
+    type: 'fxm-filter',
+    label: 'FXMaster: Apply Filter',
+    category: 'module',
+    moduleId: 'fxmaster',
+    description: 'Apply a visual filter to the scene',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { filterType: '' },
+    ports: [],
+    fields: [
+      {
+        key: 'filterType',
+        label: 'Filter',
+        type: 'select',
+        selectOptions: [
+          { value: 'predator', label: 'Predator Vision' },
+          { value: 'underwater', label: 'Underwater' },
+          { value: 'dawn', label: 'Dawn' },
+          { value: 'dusk', label: 'Dusk' },
+          { value: 'night', label: 'Night' },
+          { value: 'sunlight', label: 'Sunlight' },
+          { value: 'moonlight', label: 'Moonlight' },
+          { value: 'cave', label: 'Cave' },
+        ],
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const filter = fieldVal('filterType', '');
+      return [
+        indent + `// --- FXMaster: Apply Filter ---`,
+        indent + `if (!${filter}) { ui.notifications.warn('No filter selected'); return }`,
+        indent + `canvas.effects.filters.set(${filter}, true)`,
+        indent + `ui.notifications.info(\`Applied \${${filter}} filter\`)`,
         '',
-      ],
+      ];
     },
-  ],
-};
+  },
 
-// ─── Item Macro ──────────────────────────────────────────────
-// Docs: https://github.com/ruipin/fvtt-item-macro
-
-const itemacro: ModuleMapping = {
-  id: 'itemacro',
-  label: 'Item Macro',
-  description: 'Run macros attached to items, spells, or features',
-  docs: 'https://github.com/ruipin/fvtt-item-macro',
-  nodes: [
-    {
-      type: 'itemacro-run',
-      label: 'Item Macro: Execute',
-      description: 'Execute the macro attached to an item',
-      properties: [
-        { key: 'itemName', label: 'Item Name', type: 'text', placeholder: 'e.g. Longsword' },
-        { key: 'target', label: 'Target Actor', type: 'text', placeholder: '@token or Actor Name' },
-      ],
-      generateCode: (d) => [
-        '// --- Item Macro: Execute ---',
-        d.target
-          ? `const actor = game.actors.getName("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")?.actor`
-          : 'const actor = token?.actor',
-        "if (!actor) { ui.notifications.warn('No target actor'); return }",
-        `const item = actor.items.getName("${esc(d.itemName || '')}")`,
-        'if (!item) { ui.notifications.warn(`Item "${esc(d.itemName || \'\')}" not found`); return }',
-        'await item.executeMacro?.()',
+  // ── Item Macro ──────────────────────────────────────────
+  {
+    type: 'itemacro-run',
+    label: 'Item Macro: Execute',
+    category: 'module',
+    moduleId: 'itemacro',
+    description: 'Execute the macro attached to an item',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { itemName: '', target: '' },
+    ports: [
+      { id: 'target', label: 'Target Actor', type: 'input', dataType: 'token' },
+      { id: 'itemName', label: 'Item Name', type: 'input', dataType: 'string' },
+    ],
+    fields: [
+      {
+        key: 'itemName',
+        label: 'Item Name',
+        type: 'text',
+        placeholder: 'e.g. Longsword',
+        displayOrder: 1,
+      },
+      {
+        key: 'target',
+        label: 'Target Actor',
+        type: 'text',
+        placeholder: '@token or Actor Name',
+        displayOrder: 2,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const targetExpr = fieldVal('target', 'token');
+      const itemName = fieldVal('itemName', '');
+      const lines = [
+        indent + `// --- Item Macro: Execute ---`,
+        indent + `const tgtActor = ${targetExpr}?.actor || ${targetExpr}`,
+        indent + `if (!tgtActor) { ui.notifications.warn('No target actor'); return }`,
+        indent + `const item = tgtActor.items.getName(${itemName})`,
+        indent +
+          `if (!item) { ui.notifications.warn(\`Item \"\${${itemName}}\" not found\`); return }`,
+        indent + `await item.executeMacro?.()`,
         '',
-      ],
+      ];
+      return lines;
     },
-  ],
-};
+  },
 
-// ─── Smart Target ────────────────────────────────────────────
-// Docs: https://github.com/theripper93/smart-target
-
-const smarttarget: ModuleMapping = {
-  id: 'smarttarget',
-  label: 'Smart Target',
-  description: 'Token targeting utilities',
-  docs: 'https://github.com/theripper93/smart-target',
-  nodes: [
-    {
-      type: 'st-target-token',
-      label: 'Smart Target: Target Token',
-      description: 'Set a token as the active target',
-      properties: [
-        { key: 'targetName', label: 'Token Name', type: 'text', placeholder: 'Goblin 1' },
-      ],
-      generateCode: (d) => [
-        '// --- Smart Target: Target Token ---',
-        d.targetName
-          ? `const tgt = canvas.tokens.placeables.find(t => t.name === "${esc(d.targetName)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('Token not found'); return }",
-        'tgt.setTarget(true, {releaseOthers: false})',
+  // ── Smart Target ────────────────────────────────────────
+  {
+    type: 'st-target-token',
+    label: 'Smart Target: Target Token',
+    category: 'module',
+    moduleId: 'smarttarget',
+    description: 'Set a token as the active target',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { targetName: '' },
+    ports: [
+      // No data ports — targetName is text, no data flow
+    ],
+    fields: [
+      {
+        key: 'targetName',
+        label: 'Token Name',
+        type: 'text',
+        placeholder: 'Goblin 1',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const targetName = fieldVal('targetName', '');
+      const lines = [
+        indent + `// --- Smart Target: Target Token ---`,
+        indent + `const tgt = ${targetName}`,
+        indent + `  ? canvas.tokens.placeables.find(t => t.name === ${targetName})`,
+        indent + `  : token`,
+        indent + `if (!tgt) { ui.notifications.warn('Token not found'); return }`,
+        indent + `tgt.setTarget(true, {releaseOthers: false})`,
         '',
-      ],
+      ];
+      return lines;
     },
-    {
-      type: 'st-clear-targets',
-      label: 'Smart Target: Clear All',
-      description: 'Clear all active targets',
-      properties: [],
-      generateCode: () => [
-        '// --- Smart Target: Clear All ---',
-        'game.user.targets.forEach(t => t.setTarget(false))',
+  },
+  {
+    type: 'st-clear-targets',
+    label: 'Smart Target: Clear All',
+    category: 'module',
+    moduleId: 'smarttarget',
+    description: 'Clear all active targets',
+    icon: null as unknown as React.ReactNode,
+    defaultData: {},
+    ports: [],
+    fields: [],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: () => [
+      '// --- Smart Target: Clear All ---',
+      'game.user.targets.forEach(t => t.setTarget(false))',
+      '',
+    ],
+  },
+
+  // ── Monk's Active Tile Triggers ─────────────────────────
+  {
+    type: 'mat-trigger-tile',
+    label: 'MAT: Trigger Tile',
+    category: 'module',
+    moduleId: 'monks-active-tiles',
+    description: "Manually trigger a Monk's Active Tile",
+    icon: null as unknown as React.ReactNode,
+    defaultData: { tileName: '' },
+    ports: [],
+    fields: [
+      {
+        key: 'tileName',
+        label: 'Tile Name',
+        type: 'text',
+        placeholder: 'e.g. Trap Door',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const tileName = fieldVal('tileName', '');
+      return [
+        indent + `// --- MAT: Trigger Tile ---`,
+        indent + `const tile = canvas.tiles.placeables.find(t => t.document.name === ${tileName})`,
+        indent + `if (!tile) { ui.notifications.warn('Tile not found'); return }`,
+        indent + `try { await tile.document.trigger(token) } catch(e) { console.error(e) }`,
         '',
-      ],
+      ];
     },
-  ],
-};
+  },
 
-// ─── Monk's Active Tile Triggers ─────────────────────────────
-// Docs: https://github.com/ironmonk88/monks-active-tiles
-
-const monksActiveTiles: ModuleMapping = {
-  id: 'monks-active-tiles',
-  label: "Monk's Active Tile Triggers",
-  description: 'Trigger tile effects programmatically',
-  docs: 'https://github.com/ironmonk88/monks-active-tiles',
-  nodes: [
-    {
-      type: 'mat-trigger-tile',
-      label: 'MAT: Trigger Tile',
-      description: "Manually trigger a Monk's Active Tile",
-      properties: [
-        { key: 'tileName', label: 'Tile Name', type: 'text', placeholder: 'e.g. Trap Door' },
-      ],
-      generateCode: (d) => [
-        '// --- MAT: Trigger Tile ---',
-        `const tile = canvas.tiles.placeables.find(t => t.document.name === "${esc(
-          d.tileName || '',
-        )}")`,
-        "if (!tile) { ui.notifications.warn('Tile not found'); return }",
-        'try { await tile.document.trigger(token) } catch(e) { console.error(e) }',
+  // ── Dice So Nice ────────────────────────────────────────
+  {
+    type: 'dsn-show-roll',
+    label: 'Dice So Nice: Show 3D Roll',
+    category: 'module',
+    moduleId: 'dice-so-nice',
+    description: 'Display a 3D dice roll — pipe from a Roll Dice node',
+    icon: null as unknown as React.ReactNode,
+    defaultData: {},
+    ports: [{ id: 'roll', label: 'Roll', type: 'input', dataType: 'roll' }],
+    fields: [
+      {
+        key: 'roll',
+        label: 'Roll Source',
+        type: 'text',
+        placeholder: 'Pipe from Roll Dice',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const rollExpr = fieldVal('roll', '');
+      if (!rollExpr) {
+        return [indent + '// Dice So Nice: No roll piped — connect a Roll Dice node'];
+      }
+      return [
+        indent + '// --- Dice So Nice: Show 3D Roll ---',
+        indent + 'await game.dice3d.showForRoll(' + rollExpr + ')',
         '',
-      ],
+      ];
     },
-  ],
-};
+  },
+  // ── Wall Height ─────────────────────────────────────────
+  {
+    type: 'wh-set-elevation',
+    label: 'Wall Height: Set Elevation',
+    category: 'module',
+    moduleId: 'wall-height',
+    description: "Set a token's elevation for wall height checks",
+    icon: null as unknown as React.ReactNode,
+    defaultData: { elevation: '1', target: '' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'elevation', label: 'Elevation', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'elevation',
+        label: 'Elevation (grid units)',
+        type: 'number',
+        placeholder: '1',
+        displayOrder: 1,
+      },
+      { key: 'target', label: 'Target', type: 'text', placeholder: '@token', displayOrder: 2 },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const elevation = fieldVal('elevation', '1');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetToken) { ui.notifications.warn('No target'); return }`);
+      lines.push(
+        indent +
+          `await targetToken.document.update({"elevation": parseInt(String(${elevation})) || 1})`,
+      );
+      lines.push('');
+      return lines;
+    },
+  },
 
-// ─── Dice So Nice ────────────────────────────────────────────
-// Docs: https://gitlab.com/riccisi/foundryvtt-dice-so-nice
+  // ── Levels ──────────────────────────────────────────────
+  {
+    type: 'lvl-set-level',
+    label: 'Levels: Set Token Level',
+    category: 'module',
+    moduleId: 'levels',
+    description: "Set a token's current level",
+    icon: null as unknown as React.ReactNode,
+    defaultData: { rangeBottom: '0', rangeTop: '5', target: '' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'rangeBottom', label: 'Range Bottom', type: 'input', dataType: 'number' },
+      { id: 'rangeTop', label: 'Range Top', type: 'input', dataType: 'number' },
+    ],
+    fields: [
+      {
+        key: 'rangeBottom',
+        label: 'Range Bottom',
+        type: 'number',
+        placeholder: '0',
+        displayOrder: 1,
+      },
+      { key: 'rangeTop', label: 'Range Top', type: 'number', placeholder: '5', displayOrder: 2 },
+      { key: 'target', label: 'Target', type: 'text', placeholder: '@token', displayOrder: 3 },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const rangeBottom = fieldVal('rangeBottom', '0');
+      const rangeTop = fieldVal('rangeTop', '5');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetToken) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `targetToken.document.update({`);
+      lines.push(indent + `  "elevation": parseInt(String(${rangeBottom})) || 0,`);
+      lines.push(
+        indent +
+          `  "flags.levels": { "rangeBottom": parseInt(String(${rangeBottom})) || 0, "rangeTop": parseInt(String(${rangeTop})) || 5 }`,
+      );
+      lines.push(indent + `})`);
+      lines.push('');
+      return lines;
+    },
+  },
 
-const diceSoNice: ModuleMapping = {
-  id: 'dice-so-nice',
-  label: 'Dice So Nice!',
-  description: '3D dice rolling with custom themes',
-  docs: 'https://gitlab.com/riccisi/foundryvtt-dice-so-nice',
-  nodes: [
-    {
-      type: 'dsn-show-roll',
-      label: 'Dice So Nice: Show 3D Roll',
-      description: 'Display a 3D dice roll',
-      properties: [
-        { key: 'formula', label: 'Formula', type: 'text', placeholder: '1d20+5' },
-        { key: 'flavor', label: 'Flavor Text', type: 'text', placeholder: 'Attack Roll' },
-      ],
-      generateCode: (d) => [
-        '// --- Dice So Nice: Show 3D Roll ---',
-        `const formula = "${esc(d.formula || '1d20')}"`,
-        `const flavor = "${esc(d.flavor || '')}"`,
-        'const roll = await new Roll(formula).roll({async: true})',
-        'await game.dice3d.showForRoll(roll)',
-        'if (flavor) await roll.toMessage({flavor})',
+  // ── Automated Animations ────────────────────────────────
+  {
+    type: 'aa-test-animation',
+    label: 'AutoAnimations: Test Animation',
+    category: 'module',
+    moduleId: 'autoanimations',
+    description: 'Play a test animation on selected token',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { animationType: 'melee', target: '' },
+    ports: [
+      { id: 'target', label: 'Target', type: 'input', dataType: 'token' },
+      { id: 'animationType', label: 'Animation Type', type: 'input', dataType: 'string' },
+    ],
+    fields: [
+      {
+        key: 'animationType',
+        label: 'Animation Type',
+        type: 'select',
+        selectOptions: [
+          { value: 'melee', label: 'Melee Attack' },
+          { value: 'ranged', label: 'Ranged Attack' },
+          { value: 'spell', label: 'Spell Cast' },
+          { value: 'heal', label: 'Healing' },
+          { value: 'buff', label: 'Buff' },
+        ],
+        displayOrder: 1,
+      },
+      { key: 'target', label: 'Target', type: 'text', placeholder: '@target', displayOrder: 2 },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const animType = fieldVal('animationType', 'melee');
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `ui.notifications.info(\`Test animation: \${${animType}}\`)`);
+      lines.push('');
+      return lines;
+    },
+  },
+
+  // ── Active Auras ────────────────────────────────────────
+  {
+    type: 'aa-refresh-auras',
+    label: 'Active Auras: Refresh',
+    category: 'module',
+    moduleId: 'ActiveAuras',
+    description: 'Force refresh all active auras',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { target: '' },
+    ports: [{ id: 'target', label: 'Target Token', type: 'input', dataType: 'token' }],
+    fields: [
+      {
+        key: 'target',
+        label: 'Target Token',
+        type: 'text',
+        placeholder: '(optional) @token name',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'piped-token',
+    codeGen: (ctx) => {
+      const { indent } = ctx;
+      const lines = [...fieldTokens(ctx)];
+      lines.push(indent + `if (!targetActor) { ui.notifications.warn('No target'); return }`);
+      lines.push(indent + `// ActiveAuras recalculates automatically`);
+      lines.push(indent + `targetActor.effects.forEach(e => e.update({}))`);
+      lines.push('');
+      return lines;
+    },
+  },
+
+  // ── Monk's Wall Enhancement ─────────────────────────────
+  {
+    type: 'mwe-set-wall',
+    label: 'MWE: Toggle Wall Door',
+    category: 'module',
+    moduleId: 'monks-wall-enhancement',
+    description: 'Toggle a wall door state',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { wallName: '' },
+    ports: [],
+    fields: [
+      {
+        key: 'wallName',
+        label: 'Wall ID or Direction',
+        type: 'text',
+        placeholder: 'e.g. wall direction: top',
+        displayOrder: 1,
+      },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: () => [
+      '// --- MWE: Toggle Wall Door ---',
+      '// Toggle first door in scene',
+      'const doorWalls = canvas.walls.placeables.filter(w => w.document.door === CONST.WALL_DOOR_TYPES.DOOR)',
+      "if (doorWalls.length === 0) { ui.notifications.warn('No doors found'); return }",
+      'const wall = doorWalls[0]',
+      'wall.document.update({ds: wall.document.ds === 1 ? 0 : 1})',
+      '',
+    ],
+  },
+
+  // ── Dice Calculator (Dice Tray) ─────────────────────────
+  {
+    type: 'dt-roll',
+    label: 'Dice Tray: Roll Formula',
+    category: 'module',
+    moduleId: 'dice-calculator',
+    description: 'Roll a formula via Dice Tray',
+    icon: null as unknown as React.ReactNode,
+    defaultData: { formula: '1d20' },
+    ports: [],
+    fields: [
+      { key: 'formula', label: 'Formula', type: 'text', placeholder: '1d20+5', displayOrder: 1 },
+    ],
+    outputSchema: [],
+    actorSource: 'none',
+    codeGen: (ctx) => {
+      const { fieldVal, indent } = ctx;
+      const formula = fieldVal('formula', '1d20');
+      return [
+        indent + `// --- Dice Tray: Roll Formula ---`,
+        indent + `const roll = await new Roll(${formula}).roll({async: true})`,
+        indent + `await roll.toMessage()`,
         '',
-      ],
+      ];
     },
-  ],
-};
+  },
+];
 
-// ─── Wall Height ─────────────────────────────────────────────
-// Docs: https://github.com/theripper93/wall-height
+// ─── Lookup helpers ──────────────────────────────────────
 
-const wallHeight: ModuleMapping = {
-  id: 'wall-height',
-  label: 'Wall Height',
-  description: 'Elevation-based wall visibility',
-  docs: 'https://github.com/theripper93/wall-height',
-  nodes: [
-    {
-      type: 'wh-set-elevation',
-      label: 'Wall Height: Set Elevation',
-      description: "Set a token's elevation for wall height checks",
-      properties: [
-        { key: 'elevation', label: 'Elevation (grid units)', type: 'number', placeholder: '1' },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token' },
-      ],
-      generateCode: (d) => [
-        '// --- Wall Height: Set Elevation ---',
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        `await tgt.document.update({"elevation": ${intVal(d.elevation, 1)}})`,
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── Levels ──────────────────────────────────────────────────
-// Docs: https://github.com/theripper93/levels
-
-const levels: ModuleMapping = {
-  id: 'levels',
-  label: 'Levels',
-  description: 'Multi-level map support with elevation',
-  docs: 'https://github.com/theripper93/levels',
-  nodes: [
-    {
-      type: 'lvl-set-level',
-      label: 'Levels: Set Token Level',
-      description: "Set a token's current level",
-      properties: [
-        { key: 'rangeBottom', label: 'Range Bottom', type: 'number', placeholder: '0' },
-        { key: 'rangeTop', label: 'Range Top', type: 'number', placeholder: '5' },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@token' },
-      ],
-      generateCode: (d) => [
-        '// --- Levels: Set Token Level ---',
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        `tgt.document.update({
-  "elevation": ${intVal(d.rangeBottom, 0)},
-  "flags.levels": { "rangeBottom": ${intVal(d.rangeBottom, 0)}, "rangeTop": ${intVal(
-    d.rangeTop,
-    5,
-  )} }
-})`,
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── Automated Animations ────────────────────────────────────
-// Docs: https://github.com/otigon/automated-jb2a-animations
-
-const autoAnimations: ModuleMapping = {
-  id: 'autoanimations',
-  label: 'Automated Animations',
-  description: 'Automatic JB2A animations on actions',
-  docs: 'https://github.com/otigon/automated-jb2a-animations',
-  nodes: [
-    {
-      type: 'aa-test-animation',
-      label: 'AutoAnimations: Test Animation',
-      description: 'Play a test animation on selected token',
-      properties: [
-        {
-          key: 'animationType',
-          label: 'Animation Type',
-          type: 'select',
-          options: [
-            { value: 'melee', label: 'Melee Attack' },
-            { value: 'ranged', label: 'Ranged Attack' },
-            { value: 'spell', label: 'Spell Cast' },
-            { value: 'heal', label: 'Healing' },
-            { value: 'buff', label: 'Buff' },
-          ],
-        },
-        { key: 'target', label: 'Target', type: 'text', placeholder: '@target' },
-      ],
-      generateCode: (d) => [
-        '// --- AutoAnimations: Test Animation ---',
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        `const animType = "${esc(d.animationType || 'melee')}"`,
-        '// AutoAnimations triggers automatically on item usage',
-        `ui.notifications.info(\`Test animation: \${animType}\`)`,
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── Active Auras ────────────────────────────────────────────
-// Docs: https://github.com/kandashi/Active-Auras
-
-const activeAuras: ModuleMapping = {
-  id: 'ActiveAuras',
-  label: 'Active Auras',
-  description: 'Automated aura effect management',
-  docs: 'https://github.com/kandashi/Active-Auras',
-  nodes: [
-    {
-      type: 'aa-refresh-auras',
-      label: 'Active Auras: Refresh',
-      description: 'Force refresh all active auras',
-      properties: [
-        {
-          key: 'target',
-          label: 'Target Token',
-          type: 'text',
-          placeholder: '(optional) @token name',
-        },
-      ],
-      generateCode: (d) => [
-        '// --- Active Auras: Refresh ---',
-        d.target
-          ? `const tgt = canvas.tokens.get("${esc(
-              d.target,
-            )}") || canvas.tokens.placeables.find(t => t.name === "${esc(d.target)}")`
-          : 'const tgt = token',
-        "if (!tgt) { ui.notifications.warn('No target'); return }",
-        '// ActiveAuras recalculates automatically',
-        'tgt.actor.effects.forEach(e => e.update({}))',
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── Monk's Wall Enhancement ─────────────────────────────────
-// Docs: https://github.com/ironmonk88/monks-wall-enhancement
-
-const monksWallEnhancement: ModuleMapping = {
-  id: 'monks-wall-enhancement',
-  label: "Monk's Wall Enhancement",
-  description: 'Advanced wall editing utilities',
-  docs: 'https://github.com/ironmonk88/monks-wall-enhancement',
-  nodes: [
-    {
-      type: 'mwe-set-wall',
-      label: 'MWE: Toggle Wall Door',
-      description: 'Toggle a wall door state',
-      properties: [
-        {
-          key: 'wallName',
-          label: 'Wall ID or Direction',
-          type: 'text',
-          placeholder: 'e.g. wall direction: top',
-        },
-      ],
-      generateCode: () => [
-        '// --- MWE: Toggle Wall Door ---',
-        '// Toggle first door in scene',
-        'const doorWalls = canvas.walls.placeables.filter(w => w.document.door === CONST.WALL_DOOR_TYPES.DOOR)',
-        "if (doorWalls.length === 0) { ui.notifications.warn('No doors found'); return }",
-        'const wall = doorWalls[0]',
-        'wall.document.update({ds: wall.document.ds === 1 ? 0 : 1})',
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── Dice Calculator (Dice Tray) ─────────────────────────────
-// Docs: https://github.com/theripper93/dice-calculator
-
-const diceCalculator: ModuleMapping = {
-  id: 'dice-calculator',
-  label: 'Dice Tray',
-  description: 'Quick dice formulas from the tray',
-  docs: 'https://github.com/theripper93/dice-calculator',
-  nodes: [
-    {
-      type: 'dt-roll',
-      label: 'Dice Tray: Roll Formula',
-      description: 'Roll a formula via Dice Tray',
-      properties: [{ key: 'formula', label: 'Formula', type: 'text', placeholder: '1d20+5' }],
-      generateCode: (d) => [
-        '// --- Dice Tray: Roll Formula ---',
-        `const roll = await new Roll("${esc(d.formula || '1d20')}").roll({async: true})`,
-        'await roll.toMessage()',
-        '',
-      ],
-    },
-  ],
-};
-
-// ─── All mapped modules ──────────────────────────────────────
-
-export const MODULE_MAPPINGS: Record<string, ModuleMapping> = {
-  'dfreds-convenient-effects': dfredsCE,
-  dae: dae,
-  sequencer: sequencer,
-  fxmaster: fxmaster,
-  itemacro: itemacro,
-  smarttarget: smarttarget,
-  'monks-active-tiles': monksActiveTiles,
-  'dice-so-nice': diceSoNice,
-  'wall-height': wallHeight,
-  levels: levels,
-  autoanimations: autoAnimations,
-  ActiveAuras: activeAuras,
-  'monks-wall-enhancement': monksWallEnhancement,
-  'dice-calculator': diceCalculator,
-};
-
-/**
- * Get the mapping for a module if it exists
- */
-export function getModuleMapping(moduleId: string): ModuleMapping | null {
-  // eslint-disable-next-line security/detect-object-injection
-  return MODULE_MAPPINGS[moduleId] ?? null;
+const MODULE_NODE_INDEX = new Map<string, NodeDefinition>();
+for (const def of MODULE_NODE_DEFINITIONS) {
+  MODULE_NODE_INDEX.set(def.type, def);
 }
 
 /**
- * Get all module IDs that have known mappings
+ * Get all NodeDefinitions for a given module ID
+ */
+export function getModuleNodeDefinitions(moduleId: string): NodeDefinition[] {
+  return MODULE_NODE_DEFINITIONS.filter((n) => n.moduleId === moduleId);
+}
+
+/**
+ * Get a single module node definition by type
+ */
+export function getModuleNodeDefinition(type: string): NodeDefinition | undefined {
+  return MODULE_NODE_INDEX.get(type);
+}
+
+/**
+ * Get all module IDs that have known definitions
  */
 export function getKnownModuleIds(): string[] {
-  return Object.keys(MODULE_MAPPINGS);
+  const ids = new Set<string>();
+  for (const def of MODULE_NODE_DEFINITIONS) {
+    if (def.moduleId) ids.add(def.moduleId);
+  }
+  return Array.from(ids);
+}
+
+/**
+ * Get the module ID for a given node type
+ */
+export function getModuleIdForNodeType(type: string): string | undefined {
+  return MODULE_NODE_INDEX.get(type)?.moduleId;
 }

@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { relay } from '@/lib/relay';
-import { getModuleMapping } from '@/lib/module-mappings';
+import { getModuleNodeDefinitions, getModuleNodeDefinition } from '@/lib/module-mappings';
 import {
   ExpressionEditor,
   expressionConfigToCode,
@@ -152,7 +152,7 @@ const categoryColors: Record<NodeCategory, string> = {
 
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
   const isCondition = data.type === 'condition';
-  const def = getNodeDefinition(data.type);
+  const def = getNodeDefinition(data.type) || getModuleNodeDefinition(data.type);
   const dataPorts = def?.ports || [];
 
   const dataTypeColor: Record<string, string> = {
@@ -461,12 +461,11 @@ function FlowCanvas({
         // Build dynamic property options from known modules
         const opts: Record<string, { value: string; label: string }[]> = {};
         for (const mod of active) {
-          const mapping = getModuleMapping(mod.id);
-          if (!mapping) continue;
-          for (const nodeDef of mapping.nodes) {
-            for (const prop of nodeDef.properties) {
-              if (prop.options) {
-                opts[`${mod.id}:${nodeDef.type}:${prop.key}`] = prop.options;
+          const moduleDefs = getModuleNodeDefinitions(mod.id);
+          for (const nodeDef of moduleDefs) {
+            for (const field of nodeDef.fields) {
+              if (field.selectOptions && field.selectOptions.length > 0) {
+                opts[`${mod.id}:${nodeDef.type}:${field.key}`] = field.selectOptions;
               }
             }
           }
@@ -544,51 +543,33 @@ function FlowCanvas({
     // Foundry Modules section (using module-mappings)
     const activeModules = installedModules.filter((m) => m.active);
     if (activeModules.length > 0) {
-      const moduleItems: {
-        type: string;
-        label: string;
-        category: string;
-        description: string;
-        icon?: React.ReactNode;
-        defaultData: Record<string, unknown>;
-      }[] = [];
+      const moduleItems: PaletteItem[] = [];
 
       for (const mod of activeModules) {
-        const mapping = getModuleMapping(mod.id);
+        const moduleDefs = getModuleNodeDefinitions(mod.id);
 
-        if (mapping && mapping.nodes.length > 0) {
+        if (moduleDefs.length > 0) {
           // Group header: module title
           moduleItems.push({
             type: `_section_${mod.id}`,
             label: mod.title,
             category: 'module',
-            description: mod.description || mapping.description,
+            description: mod.description || moduleDefs[0]?.description || mod.id,
             icon: <Puzzle className="h-3 w-3 text-pink-400" />,
             defaultData: { moduleId: mod.id },
           });
 
-          // Individual nodes from the mapping
-          for (const nodeDef of mapping.nodes) {
-            const defaults: Record<string, string> = {};
-            for (const prop of nodeDef.properties) {
-              if (prop.options && prop.options.length > 0) {
-                defaults[prop.key] = prop.options[0].value;
-              } else if (prop.type === 'number') {
-                defaults[prop.key] = prop.placeholder || '0';
-              } else {
-                defaults[prop.key] = '';
-              }
-            }
-
+          // Individual nodes from the module definitions
+          for (const def of moduleDefs) {
             moduleItems.push({
-              type: nodeDef.type,
-              label: nodeDef.label,
+              type: def.type,
+              label: def.label,
               category: 'module',
-              description: `${nodeDef.description} (${mod.title})`,
+              description: `${def.description} (${mod.title})`,
               icon: <Puzzle className="h-3 w-3 text-pink-400" />,
               defaultData: {
                 moduleId: mod.id,
-                ...defaults,
+                ...def.defaultData,
               },
             });
           }
@@ -609,7 +590,7 @@ function FlowCanvas({
         sections.push({
           title: `Foundry Modules (${activeModules.length})`,
           icon: <Puzzle className="h-3 w-3 text-pink-500" />,
-          items: moduleItems as PaletteItem[],
+          items: moduleItems,
         });
       }
     }
@@ -650,7 +631,7 @@ function FlowCanvas({
         const sourceNode = nodes.find((n) => n.id === connection.source);
         const portId = connection.sourceHandle?.replace('data-out-', '');
         if (sourceNode && portId) {
-          const portDefs = getNodeDefinition(sourceNode.data.type)?.ports || [];
+          const portDefs = (getNodeDefinition(sourceNode.data.type) || getModuleNodeDefinition(sourceNode.data.type))?.ports || [];
           const portDef = portDefs.find((p) => p.id === portId);
           if (portDef) dataType = portDef.dataType;
         }
@@ -756,7 +737,8 @@ function FlowCanvas({
     function dataForInput(nodeId: string, fieldKey: string): string | null {
       const entry = dataInMap.get(`${nodeId}:${fieldKey}`);
       if (!entry) return null;
-      const sourceDef = getNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '');
+      const sourceDef = getNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '') ||
+        getModuleNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '');
       const sourcePortDef = (sourceDef?.ports || []).find((p) => p.id === entry.sourcePortId);
       if (!sourcePortDef) return null;
       return dataVar(entry.sourceNodeId, entry.sourcePortId);
@@ -786,29 +768,7 @@ function FlowCanvas({
         return nodeVal || fallback;
       }
 
-      // Module-mapped nodes
-      const modId = String(d.moduleId || '');
-      if (d.category === 'module' && modId) {
-        const mapping = getModuleMapping(modId);
-        if (mapping) {
-          const nodeDef = mapping.nodes.find((n) => n.type === d.type);
-          if (nodeDef) {
-            const data: Record<string, string> = {};
-            for (const prop of nodeDef.properties) {
-              data[prop.key] = String(d[prop.key] ?? '');
-            }
-            for (const cl of nodeDef.generateCode(data)) {
-              lines.push(indent + cl);
-            }
-            return;
-          }
-        }
-        lines.push(indent + '// Module: ' + d.label + ' (' + modId + ')');
-        lines.push(indent + '// TODO: Add API calls for this module action');
-        return;
-      }
-
-      // Built-in node types — use registry codeGen for all except condition
+      // All node types — built-in via NODE_DEFINITIONS, module via MODULE_NODE_DEFINITIONS
       if (d.type === 'condition') {
         // Condition: special handler because it needs execEdgeMap for true/false branching
         const rawExprCfg = String(d._exprConfig_condition || '');
@@ -848,8 +808,8 @@ function FlowCanvas({
         }
         lines.push(indent + '}');
       } else {
-        // All other node types: use registry-based codeGen
-        const def = getNodeDefinition(d.type as string);
+        // All other node types: check built-in registry first, then module definitions
+        const def = getNodeDefinition(d.type as string) || getModuleNodeDefinition(d.type as string);
         if (def?.codeGen) {
           const ctx: CodeGenContext = {
             nodeId,
@@ -877,11 +837,11 @@ function FlowCanvas({
 
     // Smart token guard: scan graph to determine if/how token is needed
     const hasControlled = nodes.some((n) => {
-      const nd = getNodeDefinition(n.data.type as string);
+      const nd = getNodeDefinition(n.data.type as string) || getModuleNodeDefinition(n.data.type as string);
       return nd?.actorSource === 'controlled';
     });
     const hasPipedToken = nodes.some((n) => {
-      const nd = getNodeDefinition(n.data.type as string);
+      const nd = getNodeDefinition(n.data.type as string) || getModuleNodeDefinition(n.data.type as string);
       return nd?.actorSource === 'piped-token';
     });
     if (hasControlled) {
@@ -1174,30 +1134,8 @@ function FlowCanvas({
               <div className="space-y-3">
                 {(() => {
                   // Determine fields for this node
-                  const modId = String(selectedNodeData.moduleId || '');
-                  let fieldDefs: FieldDefinition[];
-
-                  if (modId) {
-                    // Module-mapped nodes: get fields from module mapping
-                    const mapping = getModuleMapping(modId);
-                    const nodeDef = mapping?.nodes.find((n) => n.type === selectedNodeData.type);
-                    if (mapping && nodeDef) {
-                      fieldDefs = getNodeFields(
-                        selectedNodeData.type,
-                        modId,
-                        nodeDef.properties.map((p) => ({
-                          key: p.key,
-                          label: p.label,
-                          type: p.type,
-                          options: p.options,
-                        })),
-                      );
-                    } else {
-                      fieldDefs = getNodeFields(selectedNodeData.type);
-                    }
-                  } else {
-                    fieldDefs = getNodeFields(selectedNodeData.type);
-                  }
+                  // Get field definitions from registry (built-in or module)
+                  const fieldDefs: FieldDefinition[] = getNodeFields(selectedNodeData.type);
 
                   // Sort by displayOrder, filter hidden
                   return fieldDefs
@@ -1342,7 +1280,7 @@ function FlowCanvas({
           {detailsDialogNode &&
             (() => {
               const nd = detailsDialogNode.data;
-              const def = getNodeDefinition(nd.type);
+              const def = getNodeDefinition(nd.type) || getModuleNodeDefinition(nd.type);
               const schema = getNodeSchema(nd.type);
               const dataPorts = def?.ports || [];
               const outputPorts = dataPorts.filter((p) => p.type === 'output');
