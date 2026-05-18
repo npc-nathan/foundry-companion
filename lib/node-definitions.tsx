@@ -296,12 +296,15 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
       const nodeName = safeJsKey(String(d.nodeName || 'rollDice'));
       return [
         indent + '// Roll Dice',
-        indent + 'const __formula = __args?.' + nodeName + ' || "' + esc(formula) + '"',
-        indent + 'const roll = new Roll(__formula)',
-        indent + 'await roll.evaluate()',
-        ...(d.flavor ? [indent + 'roll.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
-        indent + 'const ' + dataVar('roll_object') + ' = roll',
-        indent + 'const ' + dataVar('result') + ' = roll.total',
+        indent + 'const __formula = __args?.' + nodeName,
+        indent + 'const ' + dataVar('roll_object') + ' = typeof __formula === "number" ? { total: __formula } : null',
+        indent + 'const ' + dataVar('result') + ' = typeof __formula === "number" ? __formula : (() => {',
+        indent + '  const f = __formula || "' + esc(formula) + '"',
+        indent + '  const r = new Roll(f)',
+        indent + '  r.evaluateSync()',
+        ...(d.flavor ? [indent + '  r.toMessage({ flavor: "' + esc(String(d.flavor)) + '" })'] : []),
+        indent + '  return r.total',
+        indent + '})()',
       ];
     },
   },
