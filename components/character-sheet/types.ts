@@ -44,7 +44,26 @@ export interface FoundryEffect {
   label?: string;
   icon?: string;
   statuses?: string[];
-  changes?: { key: string; value: string }[];
+  disabled?: boolean;
+  changes?: { key: string; value: string; mode?: number }[];
+  duration?: {
+    rounds?: number;
+    startTime?: number;
+    seconds?: number;
+    startRound?: number;
+    startTurn?: number;
+  };
+  origin?: string;
+}
+
+/** An item-level embedded effect (from item.system.effects or item.effects). */
+export interface ItemEmbeddedEffect {
+  label: string;
+  changes: { key: string; value: string; mode?: number }[];
+  disabled?: boolean;
+  icon?: string;
+  origin: string;
+  duration?: { rounds?: number };
 }
 
 /* ── Actor data shape (returned by useActorData) ─────────────────────────── */
@@ -150,6 +169,7 @@ export interface ActorData {
   spellItems: FoundryItem[];
   traits: ActorTraits;
   effects: FoundryEffect[];
+  itemEffects: ItemEmbeddedEffect[];
   raw: {
     abilities: Record<string, unknown>;
     system: Record<string, unknown>;

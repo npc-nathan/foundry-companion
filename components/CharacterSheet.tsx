@@ -156,7 +156,7 @@ function CharacterSheetInner({
         </Tabs.Panel>
 
         <Tabs.Panel value="effects">
-          <EffectsTab {...tabProps} />
+          <EffectsTab effects={data.effects} itemEffects={data.itemEffects} />
         </Tabs.Panel>
       </Tabs.Root>
 

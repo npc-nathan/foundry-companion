@@ -1,6 +1,6 @@
 'use client';
 
-import type { FoundryItem, FoundryEffect } from './types';
+import type { FoundryItem, FoundryEffect, ItemEmbeddedEffect } from './types';
 import type { ActorData } from './types';
 import { getMod, SKILL_LABELS, SKILL_ABILITIES, ABILITY_NAMES } from './types';
 
@@ -12,7 +12,7 @@ import { getMod, SKILL_LABELS, SKILL_ABILITIES, ABILITY_NAMES } from './types';
  */
 export function useActorData(
   actorData: { data?: Record<string, unknown> },
-  effectsData: { data?: FoundryEffect[] },
+  effectsData: { data?: FoundryEffect[] | { uuid: string; effects: FoundryEffect[] } },
 ): ActorData {
   const actor = (actorData?.data || {}) as Record<string, unknown>;
   const system = (actor?.system || {}) as Record<string, unknown>;
@@ -214,6 +214,64 @@ export function useActorData(
     ],
   };
 
+  // ── Item-level effects ───────────────────────────────────────────────────────
+  // Items can have embedded effects (e.g. "Spell Attack Bonus" on a grimoire).
+  // Foundry stores these in item.system.effects (object record) or item.effects (array).
+  const itemEffects: ItemEmbeddedEffect[] = items.flatMap((item: FoundryItem) => {
+    const itemName = item.name || 'Unknown Item';
+    const collected: ItemEmbeddedEffect[] = [];
+    const itemSys = item?.system as Record<string, unknown> | undefined;
+
+    // Check item.system.effects (object record of effects)
+    if (itemSys?.effects && typeof itemSys.effects === 'object') {
+      const eMap = itemSys.effects as Record<string, unknown>;
+      for (const key of Object.keys(eMap)) {
+        const ef = eMap[key] as Record<string, unknown> | undefined;
+        if (!ef) continue;
+        const efLabel = (ef?.label as string) || key;
+        const efChanges = ef?.changes as
+          | Array<{ key: string; value: string; mode?: number }>
+          | undefined;
+        if (efChanges && Array.isArray(efChanges) && efChanges.length > 0) {
+          collected.push({
+            label: efLabel,
+            changes: efChanges as { key: string; value: string; mode?: number }[],
+            disabled: (ef?.disabled as boolean) ?? false,
+            icon: (ef?.icon as string) || undefined,
+            origin: itemName,
+            duration: ef?.duration as { rounds?: number } | undefined,
+          });
+        }
+      }
+    }
+
+    // Check item.effects (array of FoundryEffect-like objects, Foundry Collection)
+    // The effects property on a Foundry document is typically a Map/Collection
+    // serializable as an array of effect documents
+    const itemEffectArr = (item as Record<string, unknown>)?.effects as unknown[] | undefined;
+    if (Array.isArray(itemEffectArr)) {
+      for (const ef of itemEffectArr) {
+        const efObj = ef as Record<string, unknown>;
+        const efLabel = (efObj?.name as string) || (efObj?.label as string) || 'Effect';
+        const efChanges = efObj?.changes as
+          | Array<{ key: string; value: string; mode?: number }>
+          | undefined;
+        if (efChanges && Array.isArray(efChanges) && efChanges.length > 0) {
+          collected.push({
+            label: efLabel,
+            changes: efChanges as { key: string; value: string; mode?: number }[],
+            disabled: (efObj?.disabled as boolean) ?? false,
+            icon: (efObj?.icon as string) || undefined,
+            origin: itemName,
+            duration: efObj?.duration as { rounds?: number } | undefined,
+          });
+        }
+      }
+    }
+
+    return collected;
+  });
+
   return {
     identity,
     hp: { value: hpValue, max: hpMax, temp: hpTemp, pct },
@@ -229,7 +287,12 @@ export function useActorData(
     spellSlots: spellSlotsData,
     spellItems,
     traits: traitsValue,
-    effects: (effectsData?.data as FoundryEffect[]) || [],
+    effects: Array.isArray(effectsData?.data)
+      ? (effectsData.data as FoundryEffect[])
+      : Array.isArray((effectsData?.data as Record<string, unknown> | undefined)?.effects)
+        ? ((effectsData.data as Record<string, unknown>).effects as FoundryEffect[])
+        : [],
+    itemEffects,
     raw: { abilities: abilities, system, details, skills, traits, spells, resources },
   };
 }
