@@ -53,19 +53,20 @@ export const ACTION_NODES: NodeDefinition[] = [
     codeGen: ({ d, indent, dataVar, esc }) => {
       const formula = String(d.formula || '1d20');
       const nodeName = safeJsKey(String(d.nodeName || 'rollDice'));
+      const formulaVar = '__formula_' + nodeName;
       return [
         indent + '// Roll Dice',
-        indent + 'const __formula = __args?.' + nodeName,
+        indent + 'const ' + formulaVar + ' = __args?.' + nodeName,
         indent +
           'const ' +
           dataVar('roll_object') +
-          ' = typeof __formula === "number" ? { total: __formula } : null',
+          ' = typeof ' + formulaVar + ' === "number" ? { total: ' + formulaVar + ' } : null',
         indent +
           'let ' +
           dataVar('result') +
-          ' = typeof __formula === "number" ? __formula : undefined',
+          ' = typeof ' + formulaVar + ' === "number" ? ' + formulaVar + ' : undefined',
         indent + 'if (typeof ' + dataVar('result') + ' !== "number") {',
-        indent + '  const f = __formula || "' + esc(formula) + '"',
+        indent + '  const f = ' + formulaVar + ' || "' + esc(formula) + '"',
         indent + '  const r = new Roll(f)',
         indent + '  await r.evaluate()',
         ...(d.flavor

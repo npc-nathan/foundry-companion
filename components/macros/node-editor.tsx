@@ -656,6 +656,8 @@ function FlowCanvas({
         (connection.targetHandle?.startsWith('data-in-') ?? false);
       const isExecutionConnection =
         (connection.sourceHandle === 'exec-out' ||
+          connection.sourceHandle === 'true' ||
+          connection.sourceHandle === 'false' ||
           connection.sourceHandle === null ||
           connection.sourceHandle === undefined) &&
         (connection.targetHandle === 'exec-in' ||
@@ -761,6 +763,8 @@ function FlowCanvas({
         (e) =>
           !e.sourceHandle ||
           e.sourceHandle.startsWith('exec-') ||
+          e.sourceHandle === 'true' ||
+          e.sourceHandle === 'false' ||
           (!e.sourceHandle && !e.targetHandle),
       )
       .forEach((e) => {
@@ -913,6 +917,8 @@ function FlowCanvas({
       if (
         !e.sourceHandle ||
         e.sourceHandle.startsWith('exec-') ||
+        e.sourceHandle === 'true' ||
+        e.sourceHandle === 'false' ||
         (!e.sourceHandle && !e.targetHandle)
       ) {
         hasIncoming.add(e.target);
