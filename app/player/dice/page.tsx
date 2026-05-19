@@ -76,7 +76,7 @@ export default function PlayerDicePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-bold">Dice</h1>
+        <h1 className="text-lg font-heading font-bold heading-themed heading-accent heading-accent-if-defined">Dice</h1>
         <p className="text-xs text-muted-foreground">Roll dice</p>
       </div>
 

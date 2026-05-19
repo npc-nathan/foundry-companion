@@ -55,7 +55,7 @@ export default function ActorsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Actors</h1>
+        <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Actors</h1>
         <p className="text-muted-foreground text-sm">{actors.length} total in world</p>
       </div>
 

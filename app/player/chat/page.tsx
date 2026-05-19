@@ -107,7 +107,7 @@ export default function PlayerChatPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-10rem)]">
       <div className="mb-3">
-        <h1 className="text-lg font-bold">Chat</h1>
+        <h1 className="text-lg font-heading font-bold heading-themed heading-accent heading-accent-if-defined">Chat</h1>
         <p className="text-xs text-muted-foreground">Game chat</p>
       </div>
 

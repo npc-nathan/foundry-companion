@@ -120,7 +120,7 @@ export default function CombatPage() {
   if (!activeEncounter) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight">Combat Tracker</h1>
+        <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Combat Tracker</h1>
         <Card>
           <CardContent className="p-8 text-center text-muted-foreground">
             <p>No active combat encounter</p>
@@ -137,7 +137,7 @@ export default function CombatPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Combat Tracker</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Combat Tracker</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {activeEncounter.name || 'Unnamed Encounter'} — Round {activeEncounter.round || 1}
           </p>

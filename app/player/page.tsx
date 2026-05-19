@@ -44,7 +44,7 @@ export default function PlayerDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Player Dashboard</h1>
+        <h1 className="text-2xl font-heading font-bold heading-themed heading-accent heading-accent-if-defined">Player Dashboard</h1>
         <p className="text-muted-foreground">Your Foundry session overview</p>
       </div>
 
@@ -56,7 +56,7 @@ export default function PlayerDashboard() {
               <s.icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{s.value}</div>
+              <div className="text-2xl font-heading font-bold">{s.value}</div>
               <p className="text-xs text-muted-foreground">{s.description}</p>
             </CardContent>
           </Card>

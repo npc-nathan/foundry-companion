@@ -68,7 +68,7 @@ export default function GMDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">GM Dashboard</h1>
+        <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">GM Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">Connected to {config.relayUrl}</p>
       </div>
 

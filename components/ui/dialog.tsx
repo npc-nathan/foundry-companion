@@ -22,11 +22,23 @@ function Dialog({ open, onOpenChange, children, dialogWidth = 'max-w-lg' }: Dial
 
 const DialogContent = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { className?: string }
->(({ className, children, ...props }, ref) => (
+  React.HTMLAttributes<HTMLDivElement> & {
+    className?: string;
+    /** Decorative variant for the dialog panel */
+    variant?: 'default' | 'brackets' | 'glass' | 'double' | 'bevel-sharp' | 'bevel-45';
+  }
+>(({ className, children, variant, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('bg-background border rounded-lg shadow-lg p-6', className)}
+    className={cn(
+      'bg-background border border-width-lg rounded-lg shadow-lg p-6',
+      variant === 'brackets' && 'corner-brackets',
+      variant === 'glass' && 'glass-panel bg-background/80',
+      variant === 'double' && 'border-double',
+      variant === 'bevel-sharp' && 'border-bevel-sharp',
+      variant === 'bevel-45' && 'border-bevel-45',
+      className,
+    )}
     {...props}
   >
     {children}
@@ -40,7 +52,7 @@ function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
 
 function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h2 className={cn('text-lg font-semibold leading-none tracking-tight', className)} {...props} />
+    <h2 className={cn('text-lg font-heading font-semibold leading-none tracking-tight', className)} {...props} />
   );
 }
 

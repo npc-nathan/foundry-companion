@@ -133,7 +133,7 @@ export default function GMCanvasPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Scene Canvas</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Scene Canvas</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Interactive scene viewer with token management
           </p>
@@ -158,7 +158,7 @@ export default function GMCanvasPage() {
     <div className="space-y-4 h-full flex flex-col">
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{scene?.name || 'Scene Canvas'}</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">{scene?.name || 'Scene Canvas'}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {scene &&
               `${scene.width}×${scene.height}px · ${scene.grid.type === 0 ? 'Gridless' : scene.grid.type === 1 ? 'Square' : 'Hex'} grid (${scene.grid.size}px/${scene.grid.distance}${scene.grid.units})`}

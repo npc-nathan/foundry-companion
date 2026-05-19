@@ -12,7 +12,10 @@ interface Config {
 
 interface UIConfig {
   sidebarOpen: boolean;
+  /** Dark mode or light mode */
   theme: 'dark' | 'light';
+  /** Active theme preset ID (e.g. 'default', 'dnd', 'cyberpunk') */
+  themePreset: string;
 }
 
 interface Status {
@@ -33,6 +36,7 @@ interface AppState {
   setError: (error: string | null) => void;
   toggleSidebar: () => void;
   toggleTheme: () => void;
+  setThemePreset: (preset: string) => void;
   reset: () => void;
 }
 
@@ -47,6 +51,7 @@ const defaultConfig: Config = {
 const defaultUi: UIConfig = {
   sidebarOpen: true,
   theme: 'dark',
+  themePreset: 'default',
 };
 
 const defaultStatus: Status = {
@@ -92,6 +97,10 @@ export const useStore = create<AppState>()(
 
       toggleTheme: () => {
         set({ ui: { ...get().ui, theme: get().ui.theme === 'dark' ? 'light' : 'dark' } });
+      },
+
+      setThemePreset: (preset) => {
+        set({ ui: { ...get().ui, themePreset: preset } });
       },
 
       reset: () => {

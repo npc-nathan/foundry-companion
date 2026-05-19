@@ -434,7 +434,7 @@ export default function JournalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Journals</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Journals</h1>
           <p className="text-sm text-muted-foreground">{allJournalsFlat.length} entries</p>
         </div>
         <Button size="sm" onClick={() => setShowCreate(true)}>

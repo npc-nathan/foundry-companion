@@ -58,7 +58,7 @@ export default function PlayerCharacterPage() {
       {/* Header & Actor Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Character Sheet</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Character Sheet</h1>
           <p className="text-sm text-muted-foreground">
             View character stats, inventory, and spells
           </p>

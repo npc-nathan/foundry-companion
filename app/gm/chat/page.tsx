@@ -162,7 +162,7 @@ export default function GMChatPage() {
     <div className="flex flex-col h-[calc(100vh-7rem)]">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chat</h1>
+          <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Chat</h1>
           <p className="text-sm text-muted-foreground">Game chat console</p>
         </div>
       </div>
