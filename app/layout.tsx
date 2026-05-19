@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Orbitron, Cinzel } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers';
 
@@ -11,6 +11,18 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: '--font-geist-mono',
   subsets: ['latin'],
+});
+
+const orbitron = Orbitron({
+  variable: '--font-orbitron',
+  subsets: ['latin'],
+  display: 'swap',
+});
+
+const cinzel = Cinzel({
+  variable: '--font-cinzel',
+  subsets: ['latin'],
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -36,7 +48,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${orbitron.variable} ${cinzel.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="h-screen flex flex-col overflow-hidden">

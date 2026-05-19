@@ -5,14 +5,24 @@ import { cn } from '@/lib/utils';
 function Card({
   className,
   size = 'default',
+  variant,
   ...props
-}: React.ComponentProps<'div'> & { size?: 'default' | 'sm' }) {
+}: React.ComponentProps<'div'> & {
+  size?: 'default' | 'sm';
+  /** Decorative variant: adds corner brackets, glass, double border, or bevel styling */
+  variant?: 'default' | 'brackets' | 'glass' | 'double' | 'bevel-sharp' | 'bevel-45';
+}) {
   return (
     <div
       data-slot="card"
       data-size={size}
       className={cn(
         'group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl',
+        variant === 'brackets' && 'corner-brackets',
+        variant === 'glass' && 'glass-panel bg-card/80',
+        variant === 'double' && 'border-double',
+        variant === 'bevel-sharp' && 'border-bevel-sharp',
+        variant === 'bevel-45' && 'border-bevel-45',
         className,
       )}
       {...props}

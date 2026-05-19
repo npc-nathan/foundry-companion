@@ -32,12 +32,12 @@ export function AppShell({ sidebar, children }: AppShellProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
-          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-panel-header text-panel-header-foreground px-4 lg:px-6 shadow-[0_1px_0_var(--decorative-accent)]">
+          <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden [&>svg]:text-panel-header-foreground">
             <Menu className="h-5 w-5" />
           </Button>
           <div className="flex-1" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2 text-sm text-panel-header-foreground/70">
             <span className="hidden sm:inline">{config.clientName}</span>
             <span
               className={`h-2 w-2 rounded-full ${config.apiKey ? 'bg-green-500' : 'bg-red-500'}`}

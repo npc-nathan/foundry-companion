@@ -86,7 +86,7 @@ export default function GMScenesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Scenes</h1>
+        <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Scenes</h1>
         <p className="text-sm text-muted-foreground">Manage your Foundry VTT scenes</p>
       </div>
 

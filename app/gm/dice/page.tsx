@@ -253,7 +253,7 @@ export default function GMDicePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dice Roller</h1>
+        <h1 className="text-2xl font-heading font-bold tracking-tight heading-themed heading-accent heading-accent-if-defined">Dice Roller</h1>
         <p className="text-sm text-muted-foreground">Roll dice and make checks</p>
       </div>
 

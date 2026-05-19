@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect, useRef } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
-import { ThemeProvider } from 'next-themes';
+import { ThemeProvider } from '@/lib/theme/ThemeProvider';
 import { sseManager } from '@/lib/sse';
 import { useStore } from '@/lib/store';
 import { endHeadlessSession } from '@/lib/session';
@@ -90,7 +90,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ThemeProvider attribute="class" defaultTheme="dark" disableTransitionOnChange>
+        <ThemeProvider>
           {children}
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>

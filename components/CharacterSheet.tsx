@@ -586,7 +586,7 @@ function CharacterSheetInner({
           )}
         </div>
         <div>
-          <h2 className="text-xl font-bold">{String(actor.name || '')}</h2>
+          <h2 className="text-xl font-heading font-bold">{String(actor.name || '')}</h2>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {!!details.race && (
               <Badge variant="secondary" className="text-xs">
@@ -627,7 +627,7 @@ function CharacterSheetInner({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold mb-1">
+            <div className="text-2xl font-heading font-bold mb-1">
               {hpValue} / {hpMax}
               {hpTemp > 0 && <span className="text-sm text-blue-400 ml-2">+{hpTemp} temp</span>}
             </div>
@@ -817,7 +817,7 @@ function CharacterSheetInner({
                     {/* eslint-disable-next-line security/detect-object-injection */}
                     {ABILITY_NAMES[ab]}
                   </div>
-                  <div className="text-2xl font-bold mt-1">{val as number}</div>
+                  <div className="text-2xl font-heading font-bold mt-1">{val as number}</div>
                   <div className="text-sm text-muted-foreground">{mod >= 0 ? `+${mod}` : mod}</div>
                   {proficient ? (
                     <Badge variant="outline" className="text-[9px] px-1 mt-1 h-4">
@@ -930,7 +930,7 @@ function CharacterSheetInner({
                     {label}
                   </div>
                   <div
-                    className={`text-lg font-bold mt-0.5 ${bonus >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                    className={`text-lg font-heading font-bold mt-0.5 ${bonus >= 0 ? 'text-green-400' : 'text-red-400'}`}
                   >
                     {bonus >= 0 ? `+${bonus}` : bonus}
                   </div>
