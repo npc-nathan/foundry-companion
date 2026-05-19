@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,99 +30,19 @@ import {
   ScrollText,
 } from 'lucide-react';
 
-/* ── Foundry API type helpers ─────────────────────────────────────────────── */
+import { useActorData } from '@/components/character-sheet/use-actor-data';
+import { useActorMutations } from '@/components/character-sheet/use-actor-mutations';
+import type { FoundryItem, FoundryEffect } from '@/components/character-sheet/types';
+import {
+  getMod,
+  hpColor,
+  buildDamageFormula,
+  formatVersatile,
+  formatDetailField,
+  ABILITY_NAMES,
+} from '@/components/character-sheet/types';
 
-/** A generic object representing a Foundry item or spell document (partial). */
-interface FoundryDoc {
-  _id?: string;
-  name?: string;
-  type?: string;
-  img?: string;
-  uuid?: string;
-  system?: Record<string, unknown>;
-}
-
-/** A Foundry document with known spell-like system fields. */
-interface FoundryItem extends FoundryDoc {
-  system?: {
-    damage?: Record<string, unknown>;
-    armor?: Record<string, unknown>;
-    type?: Record<string, unknown>;
-    properties?: unknown[];
-    equipped?: boolean;
-    attunement?: Record<string, unknown>;
-    quantity?: number;
-    actionType?: string;
-    level?: number;
-    ability?: string;
-    school?: string;
-    preparation?: Record<string, unknown>;
-    components?: Record<string, unknown> | string;
-    castingTime?: Record<string, unknown> | string;
-    range?: Record<string, unknown> | string;
-    duration?: Record<string, unknown> | string;
-    target?: Record<string, unknown> | string;
-    save?: Record<string, unknown>;
-    description?: Record<string, unknown>;
-  };
-}
-
-/** An active effect document from Foundry. */
-interface FoundryEffect {
-  _id?: string;
-  name?: string;
-  label?: string;
-  icon?: string;
-  statuses?: string[];
-  changes?: { key: string; value: string }[];
-}
-
-/* ── Helpers ──────────────────────────────────────────────────────────────── */
-
-function getMod(val: number): number {
-  return Math.floor((val - 10) / 2);
-}
-
-function hpColor(pct: number): string {
-  if (pct > 50) return 'bg-green-500';
-  if (pct > 20) return 'bg-yellow-500';
-  return 'bg-red-500';
-}
-
-function buildDamageFormula(item: FoundryItem): string {
-  const system = item?.system;
-  const damage = system?.damage as Record<string, unknown> | undefined;
-  const base = damage?.base as Record<string, unknown> | undefined;
-  if (!base) return '';
-  const num = (base.number as number) || 1;
-  const denom = (base.denomination as number) || 4;
-  const bonus = base.bonus ? `+${String(base.bonus)}` : '';
-  return `${num}d${denom}${bonus}`;
-}
-
-function formatVersatile(versatile: unknown): string {
-  if (!versatile) return '';
-  if (typeof versatile === 'string') return `(${versatile})`;
-  if (typeof versatile !== 'object') return '';
-  const v = versatile as Record<string, unknown>;
-  const num = (v.number as number) || 1;
-  const denom = (v.denomination as number) || 0;
-  const bonus = v.bonus ? `+${String(v.bonus)}` : '';
-  return denom > 0 ? `(${num}d${denom}${bonus})` : '';
-}
-
-function formatDetailField(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'object') {
-    const obj = v as Record<string, unknown>;
-    const value = obj.value ?? obj.number ?? '';
-    const units = obj.units ?? '';
-    return `${value}${units ? ` ${String(units)}` : ''}`;
-  }
-  return '—';
-}
+/* ── Local JSX helpers ──────────────────────────────────────────────────── */
 
 function itemIcon(type: string) {
   switch (type) {
@@ -175,55 +95,16 @@ function itemSubtitle(item: FoundryItem): string {
   return '';
 }
 
-const ABILITY_NAMES: Record<string, string> = {
-  str: 'STR',
-  dex: 'DEX',
-  con: 'CON',
-  int: 'INT',
-  wis: 'WIS',
-  cha: 'CHA',
+/* ── Icon map for item sections returned by useActorData ────────────────── */
+
+const SECTION_ICON_MAP: Record<string, React.ReactNode> = {
+  Backpack: <Backpack className="h-4 w-4" />,
+  Swords: <Swords className="h-4 w-4" />,
+  ScrollText: <ScrollText className="h-4 w-4" />,
+  Sparkles: <Sparkles className="h-4 w-4" />,
 };
 
-const SKILL_LABELS: Record<string, string> = {
-  acr: 'Acrobatics',
-  ani: 'Animal Handling',
-  arc: 'Arcana',
-  ath: 'Athletics',
-  dec: 'Deception',
-  his: 'History',
-  ins: 'Insight',
-  int: 'Intimidation',
-  inv: 'Investigation',
-  med: 'Medicine',
-  nat: 'Nature',
-  prc: 'Perception',
-  prf: 'Performance',
-  rel: 'Religion',
-  slt: 'Sleight of Hand',
-  ste: 'Stealth',
-  sur: 'Survival',
-};
-
-const SKILL_ABILITIES: Record<string, string> = {
-  acr: 'dex',
-  ani: 'wis',
-  arc: 'int',
-  ath: 'str',
-  dec: 'cha',
-  his: 'int',
-  ins: 'wis',
-  int: 'cha',
-  inv: 'int',
-  med: 'wis',
-  nat: 'int',
-  per: 'cha',
-  prc: 'wis',
-  prf: 'cha',
-  rel: 'int',
-  slt: 'dex',
-  ste: 'dex',
-  sur: 'wis',
-};
+/* ── Inner component ─────────────────────────────────────────────────────── */
 
 function CharacterSheetInner({
   actorData,
@@ -234,324 +115,14 @@ function CharacterSheetInner({
   effectsData: { data?: FoundryEffect[] };
   uuid: string;
 }) {
-  const queryClient = useQueryClient();
   const [damage, setDamage] = useState('');
   const [heal, setHeal] = useState('');
   const [detailItem, setDetailItem] = useState<FoundryItem | null>(null);
   const [rolling, setRolling] = useState<string | null>(null);
   const [, setLastRollResult] = useState<{ label: string; total: number } | null>(null);
 
-  const actor = (actorData?.data || {}) as Record<string, unknown>;
-  const system = (actor?.system || {}) as Record<string, unknown>;
-  const hp =
-    ((system?.attributes as Record<string, unknown> | undefined)?.hp as
-      | Record<string, unknown>
-      | undefined) || {};
-  const abilities = (system?.abilities as Record<string, unknown> | undefined) || {};
-  const details = (system?.details as Record<string, unknown> | undefined) || {};
-  const ac =
-    ((system?.attributes as Record<string, unknown> | undefined)?.ac as
-      | Record<string, unknown>
-      | undefined) || {};
-  const init =
-    ((system?.attributes as Record<string, unknown> | undefined)?.init as
-      | Record<string, unknown>
-      | undefined) || {};
-  const movement =
-    ((system?.attributes as Record<string, unknown> | undefined)?.movement as
-      | Record<string, unknown>
-      | undefined) || {};
-  const items = (actor?.items as FoundryItem[] | undefined) || [];
-  const spells = (system?.spells as Record<string, unknown> | undefined) || {};
-  const skills = (system?.skills as Record<string, unknown> | undefined) || {};
-  const resources = (system?.resources as Record<string, unknown> | undefined) || {};
-  const traits = (system?.traits as Record<string, unknown> | undefined) || {};
-  const currency = (system?.currency as Record<string, unknown> | undefined) || {};
-
-  const hpValue = typeof hp.value === 'number' ? hp.value : 0;
-  const hpMax = typeof hp.max === 'number' ? hp.max : 1;
-  const hpTemp = typeof hp.temp === 'number' ? hp.temp : 0;
-  const pct = Math.round((hpValue / hpMax) * 100);
-  const profBonus = Math.min(6, Math.ceil(((details?.level as number) || 0) / 4) + 1);
-
-  const acValue = (() => {
-    if (typeof ac.value === 'number') return ac.value;
-    if (typeof ac.flat === 'number') return ac.flat;
-    const dexMod = getMod(
-      ((abilities?.dex as Record<string, unknown> | undefined)?.value as number) ?? 10,
-    );
-    const equippedArmor = items
-      .filter((i: FoundryItem) => {
-        const iSys = i?.system as Record<string, unknown> | undefined;
-        const armor = iSys?.armor as Record<string, unknown> | undefined;
-        const rawVal = armor?.value;
-        const baseAC = rawVal != null ? Number(rawVal) : NaN;
-        const typeVal = iSys?.type as Record<string, unknown> | undefined;
-        const armorTypeVal = typeVal?.value;
-        return (
-          i.type === 'equipment' &&
-          armorTypeVal &&
-          armorTypeVal !== 'shield' &&
-          iSys?.equipped !== false &&
-          !isNaN(baseAC) &&
-          baseAC > 0
-        );
-      })
-      .sort((a: FoundryItem, b: FoundryItem) => {
-        const aSys = a?.system as Record<string, unknown> | undefined;
-        const bSys = b?.system as Record<string, unknown> | undefined;
-        const aArmor = aSys?.armor as Record<string, unknown> | undefined;
-        const bArmor = bSys?.armor as Record<string, unknown> | undefined;
-        return (Number(bArmor?.value) ?? 0) - (Number(aArmor?.value) ?? 0);
-      });
-    if (equippedArmor.length > 0) {
-      const best = equippedArmor[0];
-      const bestSys = best?.system as Record<string, unknown> | undefined;
-      const bestArmor = bestSys?.armor as Record<string, unknown> | undefined;
-      const baseAC = Number(bestArmor?.value) || 0;
-      const bestType = bestSys?.type as Record<string, unknown> | undefined;
-      const armorType = bestType?.value;
-      let dexCap: number | null = null;
-      if (armorType === 'heavy') dexCap = 0;
-      else if (armorType === 'medium') {
-        const dexVal = bestArmor?.dex as number | undefined;
-        dexCap = Math.min(2, dexVal ?? 2);
-      }
-      const dexContrib = dexCap !== null ? Math.min(dexMod, dexCap) : dexMod;
-      let total = baseAC + dexContrib;
-      const hasShield = items.some((i: FoundryItem) => {
-        const iSys = i?.system as Record<string, unknown> | undefined;
-        const iType = iSys?.type as Record<string, unknown> | undefined;
-        return iType?.value === 'shield' && iSys?.equipped !== false;
-      });
-      if (hasShield) total += 2;
-      return total;
-    }
-    if (ac.calc === 'natural' || ac.calc === 'default') return 10 + dexMod;
-    if (typeof (ac as Record<string, unknown>).armor === 'object') {
-      const acArmor = (ac as Record<string, unknown>).armor as Record<string, unknown>;
-      if (typeof acArmor.value === 'number') return (acArmor.value as number) + dexMod;
-    }
-    return 10 + dexMod;
-  })();
-
-  const initBonus = (() => {
-    const raw = init.bonus;
-    if (raw !== undefined && raw !== null && raw !== '') return Number(raw);
-    if (init.total !== undefined && init.total !== null && init.total !== '')
-      return Number(init.total);
-    if (init.mod !== undefined && init.mod !== null && init.mod !== '') return Number(init.mod);
-    return getMod(((abilities?.dex as Record<string, unknown> | undefined)?.value as number) ?? 10);
-  })();
-
-  // Filter items
-  const weapons = items.filter((i: FoundryItem) => i?.type === 'weapon');
-  const armor = items.filter(
-    (i: FoundryItem) =>
-      (i?.type === 'equipment' &&
-        (
-          (i?.system as Record<string, unknown> | undefined)?.armor as
-            | Record<string, unknown>
-            | undefined
-        )?.value) ||
-      ['heavy', 'medium', 'light', 'shield'].includes(
-        (
-          (i?.system as Record<string, unknown> | undefined)?.type as
-            | Record<string, unknown>
-            | undefined
-        )?.value as string,
-      ),
-  );
-  const consumables = items.filter((i: FoundryItem) => i?.type === 'consumable');
-  const spellItems = items.filter((i: FoundryItem) => i?.type === 'spell');
-  const otherItems = items.filter(
-    (i: FoundryItem) =>
-      !weapons.includes(i) &&
-      !armor.includes(i) &&
-      !consumables.includes(i) &&
-      !spellItems.includes(i),
-  );
-
-  // Group other items by type
-  const featItems = otherItems.filter((i: FoundryItem) => i?.type === 'feat');
-  const toolItems = otherItems.filter((i: FoundryItem) => i?.type === 'tool');
-  const lootItems = otherItems.filter((i: FoundryItem) => i?.type === 'loot');
-  const containerItems = otherItems.filter(
-    (i: FoundryItem) => i?.type === 'container' || i?.type === 'backpack',
-  );
-  const gearItems = otherItems.filter(
-    (i: FoundryItem) => i?.type === 'equipment' && !armor.includes(i),
-  );
-  const miscItems = otherItems.filter(
-    (i: FoundryItem) =>
-      !featItems.includes(i) &&
-      !toolItems.includes(i) &&
-      !lootItems.includes(i) &&
-      !containerItems.includes(i) &&
-      !gearItems.includes(i),
-  );
-
-  const itemSections = [
-    {
-      label: 'Adventuring Gear',
-      items: gearItems,
-      icon: <Backpack className="h-4 w-4 text-amber-400" />,
-    },
-    { label: 'Tools', items: toolItems, icon: <Swords className="h-4 w-4 text-cyan-400" /> },
-    {
-      label: 'Loot & Treasure',
-      items: lootItems,
-      icon: <ScrollText className="h-4 w-4 text-green-400" />,
-    },
-    {
-      label: 'Features & Feats',
-      items: featItems,
-      icon: <Sparkles className="h-4 w-4 text-emerald-400" />,
-    },
-    {
-      label: 'Containers',
-      items: containerItems,
-      icon: <Backpack className="h-4 w-4 text-orange-400" />,
-    },
-    {
-      label: 'Other Items',
-      items: miscItems,
-      icon: <Swords className="h-4 w-4 text-muted-foreground" />,
-    },
-  ].filter((s) => s.items.length > 0);
-
-  const spellSlots = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((lvl) => {
-    const slotKey = `spell${lvl}`;
-    // eslint-disable-next-line security/detect-object-injection
-    const slot = spells[slotKey] as Record<string, unknown> | undefined;
-    return {
-      level: lvl,
-      current: (slot?.value as number) ?? 0,
-      max: (slot?.max as number) ?? (slot?.value as number) ?? 0,
-    };
-  });
-
-  // Mutations
-  const damageMutation = useMutation({
-    mutationFn: (amount: number) => relay.decrease(uuid, 'system.attributes.hp.value', amount),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      setDamage('');
-      toast.success(`Applied ${damage} damage`);
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const healMutation = useMutation({
-    mutationFn: (amount: number) => relay.increase(uuid, 'system.attributes.hp.value', amount),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      setHeal('');
-      toast.success(`Healed for ${heal}`);
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const shortRestMutation = useMutation({
-    mutationFn: () => relay.dndShortRest({ actorUuid: uuid }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      toast.success('Short rest completed!');
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const longRestMutation = useMutation({
-    mutationFn: () => relay.dndLongRest({ actorUuid: uuid }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      toast.success('Long rest completed!');
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const deathSaveMutation = useMutation({
-    mutationFn: () => relay.dndDeathSave({ actorUuid: uuid, createChatMessage: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const equipMutation = useMutation({
-    mutationFn: (params: { itemUuid?: string; itemName?: string; equipped: boolean }) =>
-      relay.dndEquipItem({ actorUuid: uuid, ...params }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      toast.success('Equipment updated');
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const attuneMutation = useMutation({
-    mutationFn: (params: { itemName: string; attuned: boolean }) =>
-      relay.dndAttuneItem({ actorUuid: uuid, ...params }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      toast.success('Attunement updated');
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const prepareSpellMutation = useMutation({
-    mutationFn: (params: { spellName: string; prepared: boolean }) =>
-      relay.dndPrepareSpell({ actorUuid: uuid, ...params }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['actor', uuid] });
-      toast.success('Spell preparation updated');
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const abilityCheckMutation = useMutation({
-    mutationFn: (ability: string) =>
-      relay.dndAbilityCheck({ actorUuid: uuid, ability, createChatMessage: true }),
-    onSuccess: (_data: unknown, ability: string) => {
-      const d = _data as { data?: { total?: number } } | undefined;
-      const total = d?.data?.total ?? '?';
-      // eslint-disable-next-line security/detect-object-injection
-      const label = ABILITY_NAMES[ability] || ability.toUpperCase();
-      setLastRollResult({ label: `${label} Check`, total: typeof total === 'number' ? total : 0 });
-      toast.success(`${label} Check: ${total}`);
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const skillCheckMutation = useMutation({
-    mutationFn: (skill: string) =>
-      relay.dndSkillCheck({ actorUuid: uuid, skill, createChatMessage: true }),
-    onSuccess: (_data: unknown, skill: string) => {
-      const d = _data as { data?: { total?: number } } | undefined;
-      const total = d?.data?.total ?? '?';
-      // eslint-disable-next-line security/detect-object-injection
-      const label = SKILL_LABELS[skill] || skill;
-      setLastRollResult({ label, total: typeof total === 'number' ? total : 0 });
-      toast.success(`${label}: ${total}`);
-    },
-    onError: (err: Error) => toast.error(String(err)),
-  });
-
-  const doRoll = useCallback(async (label: string, formula: string) => {
-    setRolling(label);
-    try {
-      const result = await relay.roll({ formula, createChatMessage: true });
-      const r = result as
-        | { data?: { roll?: { total?: number } }; roll?: { total?: number } }
-        | undefined;
-      const total = r?.data?.roll?.total ?? r?.roll?.total ?? '?';
-      setLastRollResult({ label, total: typeof total === 'number' ? total : 0 });
-      toast.success(`${label}: ${total}`);
-    } catch (e) {
-      toast.error(`Roll failed: ${String(e)}`);
-    } finally {
-      setRolling(null);
-    }
-  }, []);
+  const data = useActorData(actorData, effectsData);
+  const mutations = useActorMutations(uuid);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -561,56 +132,88 @@ function CharacterSheetInner({
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const doRoll = useCallback(
+    async (label: string, formula: string) => {
+      setRolling(label);
+      try {
+        await mutations.doRoll(label, formula);
+        setLastRollResult({ label, total: 0 });
+      } catch (e) {
+        toast.error(`Roll failed: ${String(e)}`);
+      } finally {
+        setRolling(null);
+      }
+    },
+    [mutations],
+  );
+
   const detailImage = detailItem?.img
     ? `/api/relay/download?path=${encodeURIComponent(detailItem.img)}&source=data`
     : null;
+
+  const {
+    identity,
+    hp,
+    combat,
+    abilities,
+    skills,
+    saves,
+    weapons,
+    armor,
+    consumables,
+    itemSections,
+    currency,
+    spellSlots,
+    spellItems,
+    traits,
+    effects,
+    raw: { spells: spellsRaw },
+  } = data;
 
   return (
     <div className="space-y-6">
       {/* Character Identity */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-xl font-bold overflow-hidden">
-          {actor?.img && !String(actor.img).includes('mystery-man') ? (
+          {identity.img && !identity.img.includes('mystery-man') ? (
             <Image
-              src={`/api/relay/download?path=${encodeURIComponent(String(actor.img))}&source=data`}
-              alt={String(actor.name || '')}
+              src={`/api/relay/download?path=${encodeURIComponent(identity.img)}&source=data`}
+              alt={identity.name}
               width={56}
               height={56}
               unoptimized
               className="w-full h-full object-cover rounded-full"
             />
           ) : (
-            String(actor.name || '')
-              .charAt(0)
-              .toUpperCase() || '?'
+            identity.name.charAt(0).toUpperCase() || '?'
           )}
         </div>
         <div>
-          <h2 className="text-xl font-heading font-bold">{String(actor.name || '')}</h2>
+          <h2 className="text-xl font-heading font-bold">{identity.name}</h2>
           <div className="flex flex-wrap gap-1.5 mt-1">
-            {!!details.race && (
+            {identity.race && (
               <Badge variant="secondary" className="text-xs">
-                {String(details.race)}
+                {identity.race}
               </Badge>
             )}
-            {!!details.class && (
+            {identity.class && (
               <Badge variant="secondary" className="text-xs">
-                {String(details.class)} {String(details.level || '')}
+                {identity.class} {identity.level}
               </Badge>
             )}
-            {!details.class && !!details.background && (
+            {!identity.class && identity.background && (
               <Badge variant="secondary" className="text-xs">
-                {String(details.background)}
+                {identity.background}
               </Badge>
             )}
-            {!!details.alignment && (
+            {identity.alignment && (
               <Badge variant="outline" className="text-xs">
-                {String(details.alignment)}
+                {identity.alignment}
               </Badge>
             )}
-            {!!traits.size && (
+            {identity.size && (
               <Badge variant="outline" className="text-xs">
-                {String(traits.size).toUpperCase()}
+                {identity.size.toUpperCase()}
               </Badge>
             )}
           </div>
@@ -628,13 +231,13 @@ function CharacterSheetInner({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-heading font-bold mb-1">
-              {hpValue} / {hpMax}
-              {hpTemp > 0 && <span className="text-sm text-blue-400 ml-2">+{hpTemp} temp</span>}
+              {hp.value} / {hp.max}
+              {hp.temp > 0 && <span className="text-sm text-blue-400 ml-2">+{hp.temp} temp</span>}
             </div>
             <div className="h-3 bg-muted rounded-full overflow-hidden">
               <div
-                className={`h-full ${hpColor(pct)} transition-all duration-300 rounded-full`}
-                style={{ width: `${Math.max(pct, 0)}%` }}
+                className={`h-full ${hpColor(hp.pct)} transition-all duration-300 rounded-full`}
+                style={{ width: `${Math.max(hp.pct, 0)}%` }}
               />
             </div>
             <div className="flex gap-2 mt-3">
@@ -643,8 +246,8 @@ function CharacterSheetInner({
                   size="sm"
                   variant="outline"
                   className="px-2"
-                  disabled={damageMutation.isPending}
-                  onClick={() => damageMutation.mutate(5)}
+                  disabled={mutations.damageMutation.isPending}
+                  onClick={() => mutations.damageMutation.mutate(5)}
                 >
                   -5
                 </Button>
@@ -652,8 +255,8 @@ function CharacterSheetInner({
                   size="sm"
                   variant="outline"
                   className="px-2"
-                  disabled={damageMutation.isPending}
-                  onClick={() => damageMutation.mutate(1)}
+                  disabled={mutations.damageMutation.isPending}
+                  onClick={() => mutations.damageMutation.mutate(1)}
                 >
                   -1
                 </Button>
@@ -667,8 +270,8 @@ function CharacterSheetInner({
                 <Button
                   size="sm"
                   variant="destructive"
-                  disabled={!damage || damageMutation.isPending}
-                  onClick={() => damageMutation.mutate(Number(damage))}
+                  disabled={!damage || mutations.damageMutation.isPending}
+                  onClick={() => mutations.damageMutation.mutate(Number(damage))}
                 >
                   Damage
                 </Button>
@@ -678,8 +281,8 @@ function CharacterSheetInner({
                   size="sm"
                   variant="outline"
                   className="px-2"
-                  disabled={healMutation.isPending}
-                  onClick={() => healMutation.mutate(1)}
+                  disabled={mutations.healMutation.isPending}
+                  onClick={() => mutations.healMutation.mutate(1)}
                 >
                   +1
                 </Button>
@@ -687,8 +290,8 @@ function CharacterSheetInner({
                   size="sm"
                   variant="outline"
                   className="px-2"
-                  disabled={healMutation.isPending}
-                  onClick={() => healMutation.mutate(5)}
+                  disabled={mutations.healMutation.isPending}
+                  onClick={() => mutations.healMutation.mutate(5)}
                 >
                   +5
                 </Button>
@@ -702,8 +305,8 @@ function CharacterSheetInner({
                 <Button
                   size="sm"
                   variant="default"
-                  disabled={!heal || healMutation.isPending}
-                  onClick={() => healMutation.mutate(Number(heal))}
+                  disabled={!heal || mutations.healMutation.isPending}
+                  onClick={() => mutations.healMutation.mutate(Number(heal))}
                 >
                   Heal
                 </Button>
@@ -714,30 +317,30 @@ function CharacterSheetInner({
                 size="sm"
                 variant="secondary"
                 className="flex-1"
-                disabled={shortRestMutation.isPending}
-                onClick={() => shortRestMutation.mutate()}
+                disabled={mutations.shortRestMutation.isPending}
+                onClick={() => mutations.shortRestMutation.mutate(undefined as unknown as void)}
               >
-                {shortRestMutation.isPending ? 'Resting...' : 'Short Rest'}
+                {mutations.shortRestMutation.isPending ? 'Resting...' : 'Short Rest'}
               </Button>
               <Button
                 size="sm"
                 variant="secondary"
                 className="flex-1"
-                disabled={longRestMutation.isPending}
-                onClick={() => longRestMutation.mutate()}
+                disabled={mutations.longRestMutation.isPending}
+                onClick={() => mutations.longRestMutation.mutate(undefined as unknown as void)}
               >
-                {longRestMutation.isPending ? 'Resting...' : 'Long Rest'}
+                {mutations.longRestMutation.isPending ? 'Resting...' : 'Long Rest'}
               </Button>
             </div>
-            {hpValue <= 0 && (
+            {hp.value <= 0 && (
               <Button
                 size="sm"
                 variant="destructive"
                 className="w-full mt-2"
-                disabled={deathSaveMutation.isPending}
-                onClick={() => deathSaveMutation.mutate()}
+                disabled={mutations.deathSaveMutation.isPending}
+                onClick={() => mutations.deathSaveMutation.mutate(undefined as unknown as void)}
               >
-                {deathSaveMutation.isPending ? 'Rolling...' : '🛡️ Death Saving Throw'}
+                {mutations.deathSaveMutation.isPending ? 'Rolling...' : 'Death Saving Throw'}
               </Button>
             )}
           </CardContent>
@@ -753,36 +356,33 @@ function CharacterSheetInner({
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Armor Class</span>
-              <span className="text-xl font-bold">{acValue}</span>
+              <span className="text-xl font-bold">{combat.acValue}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground flex items-center gap-1">
                 <Footprints className="h-3.5 w-3.5" /> Speed
               </span>
               <span className="text-xl font-bold">
-                {String(movement?.walk ?? '?')}
+                {combat.speed}
                 <span className="text-xs text-muted-foreground ml-1">ft</span>
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Initiative</span>
               <span className="text-lg font-semibold">
-                {typeof initBonus === 'number'
-                  ? `${initBonus >= 0 ? '+' : ''}${initBonus}`
-                  : initBonus}
+                {typeof combat.initBonus === 'number'
+                  ? `${combat.initBonus >= 0 ? '+' : ''}${combat.initBonus}`
+                  : combat.initBonus}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted-foreground">Prof. Bonus</span>
-              <span className="text-lg font-semibold">+{profBonus}</span>
+              <span className="text-lg font-semibold">+{combat.profBonus}</span>
             </div>
-            {((details?.xp as Record<string, unknown> | undefined)?.value as number | undefined) !==
-              undefined && (
+            {combat.xp !== null && (
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">XP</span>
-                <span className="text-sm font-mono">
-                  {((details.xp as Record<string, unknown>)?.value as number)?.toLocaleString()}
-                </span>
+                <span className="text-sm font-mono">{combat.xp.toLocaleString()}</span>
               </div>
             )}
           </CardContent>
@@ -799,25 +399,23 @@ function CharacterSheetInner({
         <CardContent>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
             {['str', 'dex', 'con', 'int', 'wis', 'cha'].map((ab) => {
-              // eslint-disable-next-line security/detect-object-injection
-              const abil = abilities[ab] as Record<string, unknown> | undefined;
-              const val = abil?.value || 10;
-              const mod = getMod(val as number);
-              const proficient = abil?.proficient;
+              const abil = abilities[ab];
+              const val = abil?.value ?? 10;
+              const mod = getMod(val);
+              const proficient = abil?.proficient ?? false;
               const isRolling = rolling === `ability-${ab}`;
               return (
                 <button
                   key={ab}
                   type="button"
-                  disabled={isRolling || abilityCheckMutation.isPending}
-                  onClick={() => abilityCheckMutation.mutate(ab)}
+                  disabled={isRolling || mutations.abilityCheckMutation.isPending}
+                  onClick={() => mutations.abilityCheckMutation.mutate(ab)}
                   className="text-center p-3 rounded-lg bg-muted/50 border cursor-pointer hover:bg-muted/80 hover:border-primary/30 transition-colors disabled:opacity-50"
                 >
                   <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    {/* eslint-disable-next-line security/detect-object-injection */}
                     {ABILITY_NAMES[ab]}
                   </div>
-                  <div className="text-2xl font-heading font-bold mt-1">{val as number}</div>
+                  <div className="text-2xl font-heading font-bold mt-1">{val}</div>
                   <div className="text-sm text-muted-foreground">{mod >= 0 ? `+${mod}` : mod}</div>
                   {proficient ? (
                     <Badge variant="outline" className="text-[9px] px-1 mt-1 h-4">
@@ -841,34 +439,25 @@ function CharacterSheetInner({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1">
-            {Object.entries(SKILL_LABELS).map(([key, label]) => {
-              // eslint-disable-next-line security/detect-object-injection
-              const skill = (skills?.[key] as Record<string, unknown>) || {};
-              const prof = (skill?.value as number) ?? 0;
-              // eslint-disable-next-line security/detect-object-injection
-              const abil = SKILL_ABILITIES[key] || 'dex';
-              // eslint-disable-next-line security/detect-object-injection
-              const abilObj = abilities[abil] as Record<string, unknown> | undefined;
-              const abilMod = getMod((abilObj?.value as number) || 10);
-              const total = prof > 0 ? abilMod + profBonus * prof : abilMod;
-              const isRolling = rolling === `skill-${key}`;
+            {skills.map((skill) => {
+              const isRolling = rolling === `skill-${skill.key}`;
               return (
                 <button
-                  key={key}
+                  key={skill.key}
                   type="button"
-                  disabled={isRolling || skillCheckMutation.isPending}
-                  onClick={() => skillCheckMutation.mutate(key)}
-                  className={`flex items-center justify-between px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-muted/60 hover:border hover:border-primary/20 transition-colors disabled:opacity-50 ${prof > 0 ? 'bg-muted/40 font-medium' : ''}`}
+                  disabled={isRolling || mutations.skillCheckMutation.isPending}
+                  onClick={() => mutations.skillCheckMutation.mutate(skill.key)}
+                  className={`flex items-center justify-between px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-muted/60 hover:border hover:border-primary/20 transition-colors disabled:opacity-50 ${skill.proficient ? 'bg-muted/40 font-medium' : ''}`}
                 >
                   <span className="flex items-center gap-2">
-                    {prof > 0 && <span className="text-[10px] text-primary">●</span>}
-                    {label}
+                    {skill.proficient && <span className="text-[10px] text-primary">●</span>}
+                    {skill.label}
                     {isRolling && <span className="text-[9px] text-primary ml-1">roll...</span>}
                   </span>
                   <span
-                    className={`font-mono text-xs ${total >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                    className={`font-mono text-xs ${skill.total >= 0 ? 'text-green-400' : 'text-red-400'}`}
                   >
-                    {total >= 0 ? `+${total}` : total}
+                    {skill.total >= 0 ? `+${skill.total}` : skill.total}
                   </span>
                 </button>
               );
@@ -886,55 +475,43 @@ function CharacterSheetInner({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {['str', 'dex', 'con', 'int', 'wis', 'cha'].map((ab) => {
-              // eslint-disable-next-line security/detect-object-injection
-              const abil = (abilities[ab] as Record<string, unknown>) || {};
-              const abilMod = getMod((abil?.value as number) ?? 10);
-              const proficient =
-                !!((abil as Record<string, unknown>)?.proficient as unknown[])?.[0] ||
-                !!(abil as Record<string, unknown>)?.proficient ||
-                !!((abil as Record<string, unknown>)?.save as Record<string, unknown> | undefined)
-                  ?.proficient;
-              const save = (abil as Record<string, unknown>)?.save as
-                | Record<string, unknown>
-                | undefined;
-              const saveVal = save?.value;
-              const bonus: number =
-                typeof saveVal === 'number' ? saveVal : proficient ? abilMod + profBonus : abilMod;
-              // eslint-disable-next-line security/detect-object-injection
-              const label = ABILITY_NAMES[ab] || ab.toUpperCase();
-              const isRolling = rolling === `save-${ab}`;
+            {saves.map((save) => {
+              const isRolling = rolling === `save-${save.ability}`;
               return (
                 <button
-                  key={ab}
+                  key={save.ability}
                   type="button"
                   disabled={isRolling}
                   onClick={() => {
-                    setRolling(`save-${ab}`);
+                    setRolling(`save-${save.ability}`);
                     relay
-                      .dndAbilitySave({ actorUuid: uuid, ability: ab, createChatMessage: true })
+                      .dndAbilitySave({
+                        actorUuid: uuid,
+                        ability: save.ability,
+                        createChatMessage: true,
+                      })
                       .then((r: unknown) => {
                         const result = r as
                           | { data?: { total?: number; saveTotal?: number } }
                           | undefined;
                         const total = result?.data?.total ?? result?.data?.saveTotal ?? '?';
-                        setLastRollResult({ label: `${label} Save`, total: total as number });
-                        toast.success(`${label} Save: ${total}`);
+                        setLastRollResult({ label: `${save.label} Save`, total: total as number });
+                        toast.success(`${save.label} Save: ${total}`);
                       })
                       .catch((e: Error) => toast.error(`Save failed: ${String(e)}`))
                       .finally(() => setRolling(null));
                   }}
-                  className={`text-center p-3 rounded-lg border cursor-pointer hover:bg-muted/80 hover:border-primary/30 transition-colors disabled:opacity-50 ${proficient ? 'bg-muted/40 border-primary/20' : 'bg-muted/50 border-transparent'}`}
+                  className={`text-center p-3 rounded-lg border cursor-pointer hover:bg-muted/80 hover:border-primary/30 transition-colors disabled:opacity-50 ${save.proficient ? 'bg-muted/40 border-primary/20' : 'bg-muted/50 border-transparent'}`}
                 >
                   <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
-                    {label}
+                    {save.label}
                   </div>
                   <div
-                    className={`text-lg font-heading font-bold mt-0.5 ${bonus >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                    className={`text-lg font-heading font-bold mt-0.5 ${save.bonus >= 0 ? 'text-green-400' : 'text-red-400'}`}
                   >
-                    {bonus >= 0 ? `+${bonus}` : bonus}
+                    {save.bonus >= 0 ? `+${save.bonus}` : save.bonus}
                   </div>
-                  {proficient && <div className="text-[9px] text-primary mt-0.5">● PROF</div>}
+                  {save.proficient && <div className="text-[9px] text-primary mt-0.5">● PROF</div>}
                 </button>
               );
             })}
@@ -943,7 +520,7 @@ function CharacterSheetInner({
       </Card>
 
       {/* Items Grid */}
-      {items.length > 0 && (
+      {(weapons.length > 0 || armor.length > 0) && (
         <div className="grid gap-4 md:grid-cols-2">
           {/* Weapons */}
           {weapons.length > 0 && (
@@ -1013,9 +590,9 @@ function CharacterSheetInner({
                             size="sm"
                             variant={attunement?.value ? 'default' : 'outline'}
                             className="text-[10px] h-7 px-1.5"
-                            disabled={attuneMutation.isPending}
+                            disabled={mutations.attuneMutation.isPending}
                             onClick={() =>
-                              attuneMutation.mutate({
+                              mutations.attuneMutation.mutate({
                                 itemName: item.name || '',
                                 attuned: !attunement?.value,
                               })
@@ -1067,9 +644,9 @@ function CharacterSheetInner({
                         size="sm"
                         variant={itemSys?.equipped ? 'default' : 'outline'}
                         className="text-[10px] h-7 px-2 ml-2"
-                        disabled={equipMutation.isPending}
+                        disabled={mutations.equipMutation.isPending}
                         onClick={() =>
-                          equipMutation.mutate({
+                          mutations.equipMutation.mutate({
                             itemUuid: item._id || item.uuid,
                             itemName: item.name,
                             equipped: !itemSys?.equipped,
@@ -1124,7 +701,7 @@ function CharacterSheetInner({
         <Card key={section.label}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              {section.icon}
+              {SECTION_ICON_MAP[section.iconName] || <Swords className="h-4 w-4" />}
               {section.label}
               <span className="text-xs text-muted-foreground font-normal">
                 ({section.items.length})
@@ -1159,26 +736,20 @@ function CharacterSheetInner({
         <CardContent>
           <div className="flex flex-wrap gap-3">
             {[
-              { label: 'PP', value: currency?.pp as unknown, color: 'text-indigo-300' },
-              { label: 'GP', value: currency?.gp as unknown, color: 'text-yellow-400' },
-              { label: 'EP', value: currency?.ep as unknown, color: 'text-cyan-300' },
-              { label: 'SP', value: currency?.sp as unknown, color: 'text-gray-300' },
-              { label: 'CP', value: currency?.cp as unknown, color: 'text-amber-600' },
-            ].map((c) => {
-              const val =
-                c.value && typeof c.value === 'object'
-                  ? ((c.value as Record<string, unknown>).number ?? 0)
-                  : (c.value ?? 0);
-              return (
-                <div
-                  key={c.label}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted/40"
-                >
-                  <span className={`text-sm font-bold ${c.color}`}>{val as number}</span>
-                  <span className="text-xs text-muted-foreground">{c.label}</span>
-                </div>
-              );
-            })}
+              { label: 'PP', value: currency.pp, color: 'text-indigo-300' },
+              { label: 'GP', value: currency.gp, color: 'text-yellow-400' },
+              { label: 'EP', value: currency.ep, color: 'text-cyan-300' },
+              { label: 'SP', value: currency.sp, color: 'text-gray-300' },
+              { label: 'CP', value: currency.cp, color: 'text-amber-600' },
+            ].map((c) => (
+              <div
+                key={c.label}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted/40"
+              >
+                <span className={`text-sm font-bold ${c.color}`}>{c.value}</span>
+                <span className="text-xs text-muted-foreground">{c.label}</span>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -1208,11 +779,11 @@ function CharacterSheetInner({
               </div>
             ))}
           </div>
-          {((spells.pact as Record<string, unknown> | undefined)?.value as number) > 0 && (
+          {((spellsRaw.pact as Record<string, unknown> | undefined)?.value as number) > 0 && (
             <div className="mt-2 text-center">
               <Badge variant="outline" className="text-xs">
-                Pact Magic: {String((spells.pact as Record<string, unknown>).value)} slot
-                {Number((spells.pact as Record<string, unknown>).value) !== 1 ? 's' : ''}
+                Pact Magic: {String((spellsRaw.pact as Record<string, unknown>).value)} slot
+                {Number((spellsRaw.pact as Record<string, unknown>).value) !== 1 ? 's' : ''}
               </Badge>
             </div>
           )}
@@ -1234,10 +805,9 @@ function CharacterSheetInner({
                 const lvl = (spellSys?.level as number) ?? 0;
                 const isRolling = rolling === `spell-${spell.name}`;
                 const spellAbility = (spellSys?.ability as string) || 'int';
-                // eslint-disable-next-line security/detect-object-injection
-                const abilObj = abilities[spellAbility] as Record<string, unknown> | undefined;
+                const abilObj = data.raw.abilities[spellAbility] as Record<string, unknown> | undefined;
                 const spellMod = (abilObj?.value as number) || 10;
-                const spellAttackMod = getMod(spellMod) + profBonus;
+                const spellAttackMod = getMod(spellMod) + combat.profBonus;
                 const prep = spellSys?.preparation as Record<string, unknown> | undefined;
                 const isPrepared = (prep?.prepared as boolean) ?? true;
                 const canPrepare = prep?.mode === 'prepared' || prep?.prepared !== undefined;
@@ -1250,10 +820,10 @@ function CharacterSheetInner({
                     {canPrepare ? (
                       <button
                         type="button"
-                        disabled={prepareSpellMutation.isPending}
+                        disabled={mutations.prepareSpellMutation.isPending}
                         onClick={(e) => {
                           e.stopPropagation();
-                          prepareSpellMutation.mutate({
+                          mutations.prepareSpellMutation.mutate({
                             spellName: spell.name || '',
                             prepared: !isPrepared,
                           });
@@ -1310,7 +880,7 @@ function CharacterSheetInner({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {!!(details?.biography as Record<string, unknown> | undefined)?.value && (
+            {traits.biography && (
               <div>
                 <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">
                   Biography
@@ -1318,7 +888,7 @@ function CharacterSheetInner({
                 <div
                   className="text-sm prose-sm prose-invert max-w-none [&_p]:mb-1"
                   dangerouslySetInnerHTML={{
-                    __html: (details.biography as Record<string, unknown>).value as string,
+                    __html: traits.biography,
                   }}
                 />
               </div>
@@ -1328,101 +898,58 @@ function CharacterSheetInner({
                 Damage Resistances
               </h4>
               <p className="text-sm">
-                {((traits?.dr as Record<string, unknown> | undefined)?.value
-                  ? ((traits.dr as Record<string, unknown>).value as string[])
-                  : []
-                ).join(', ') || 'None'}
-                {!!(traits?.dr as Record<string, unknown> | undefined)?.custom &&
-                  ` (${String((traits.dr as Record<string, unknown>).custom)})`}
+                {traits.dr.join(', ') || 'None'}
+                {traits.drCustom && ` (${traits.drCustom})`}
               </p>
             </div>
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">
                 Condition Immunities
               </h4>
-              <p className="text-sm">
-                {((traits?.ci as Record<string, unknown> | undefined)?.value
-                  ? ((traits.ci as Record<string, unknown>).value as string[])
-                  : []
-                ).join(', ') || 'None'}
-              </p>
+              <p className="text-sm">{traits.ci.join(', ') || 'None'}</p>
             </div>
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">
                 Languages
               </h4>
               <p className="text-sm">
-                {((traits?.languages as Record<string, unknown> | undefined)?.value
-                  ? ((traits.languages as Record<string, unknown>).value as string[])
-                  : []
-                ).join(', ') || 'None'}
-                {!!(traits?.languages as Record<string, unknown> | undefined)?.custom &&
-                  ` (${String((traits.languages as Record<string, unknown>).custom)})`}
+                {traits.languages.join(', ') || 'None'}
+                {traits.languagesCustom && ` (${traits.languagesCustom})`}
               </p>
             </div>
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">
                 Senses
               </h4>
-              <p className="text-sm">
-                {((
-                  (system?.attributes as Record<string, unknown>)?.senses as Record<string, unknown>
-                )?.darkvision as number) > 0 &&
-                  `Darkvision ${String(((system.attributes as Record<string, unknown>).senses as Record<string, unknown>).darkvision)}ft`}
-                {((
-                  (system?.attributes as Record<string, unknown>)?.senses as Record<string, unknown>
-                )?.blindsight as number) > 0 &&
-                  `, Blindsight ${String(((system.attributes as Record<string, unknown>).senses as Record<string, unknown>).blindsight)}ft`}
-                {((
-                  (system?.attributes as Record<string, unknown>)?.senses as Record<string, unknown>
-                )?.truesight as number) > 0 &&
-                  `, Truesight ${String(((system.attributes as Record<string, unknown>).senses as Record<string, unknown>).truesight)}ft`}
-                {!(
-                  (system?.attributes as Record<string, unknown>)?.senses as Record<string, unknown>
-                )?.darkvision &&
-                  !(
-                    (system?.attributes as Record<string, unknown>)?.senses as Record<
-                      string,
-                      unknown
-                    >
-                  )?.blindsight &&
-                  !(
-                    (system?.attributes as Record<string, unknown>)?.senses as Record<
-                      string,
-                      unknown
-                    >
-                  )?.truesight &&
-                  'Normal'}
-              </p>
+              <p className="text-sm">{traits.senses}</p>
             </div>
-            {((resources?.primary as Record<string, unknown>)?.max as number) > 0 && (
-              <div>
+            {traits.resources.map((r, i) => (
+              <div key={i}>
                 <h4 className="text-xs font-semibold text-muted-foreground mb-1 uppercase tracking-wider">
-                  {String((resources.primary as Record<string, unknown>).label || 'Resource')}
+                  {r.label}
                 </h4>
                 <p className="text-sm">
-                  {String((resources.primary as Record<string, unknown>).value)}/
-                  {(resources.primary as Record<string, unknown>).max as number}
-                  {!!(resources.primary as Record<string, unknown>).sr && ' (Short Rest)'}
-                  {!!(resources.primary as Record<string, unknown>).lr && ' (Long Rest)'}
+                  {r.value}/{r.max}
+                  {r.sr && ' (Short Rest)'}
+                  {r.lr && ' (Long Rest)'}
                 </p>
               </div>
-            )}
+            ))}
           </div>
         </CardContent>
       </Card>
 
       {/* Active Effects */}
-      {effectsData?.data && Array.isArray(effectsData.data) && effectsData.data.length > 0 && (
+      {effects.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Zap className="h-4 w-4 text-blue-400" /> Active Effects ({effectsData.data.length})
+              <Zap className="h-4 w-4 text-blue-400" /> Active Effects ({effects.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {effectsData.data.map((effect: FoundryEffect) => (
+              {effects.map((effect: FoundryEffect) => (
                 <Badge
                   key={effect._id || effect.name}
                   variant="secondary"
@@ -1656,9 +1183,9 @@ function CharacterSheetInner({
                         size="sm"
                         variant={isAttuned ? 'default' : 'outline'}
                         className="w-full"
-                        disabled={attuneMutation.isPending}
+                        disabled={mutations.attuneMutation.isPending}
                         onClick={() =>
-                          attuneMutation.mutate({
+                          mutations.attuneMutation.mutate({
                             itemName: detailItem.name || '',
                             attuned: !isAttuned,
                           })
@@ -1713,6 +1240,8 @@ function CharacterSheetInner({
     </div>
   );
 }
+
+/* ── Outer component (data fetching shell) ───────────────────────────────── */
 
 export default function CharacterSheet({ uuid, isLoading }: { uuid: string; isLoading?: boolean }) {
   const { data, isLoading: loading } = useQuery({
