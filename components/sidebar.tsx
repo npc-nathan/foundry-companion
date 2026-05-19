@@ -64,7 +64,7 @@ export function Sidebar() {
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-heading transition-all',
                     active
-                      ? 'bg-accent text-accent-foreground font-medium border-l-[3px] border-decorative-accent shadow-[inset_2px_0_0_var(--decorative-accent)]'
+                      ? 'bg-accent text-accent-foreground font-medium border-l-[3px] border-decorative-accent shadow-[inset_2px_0_0_var(--decorative-accent)] glow-sm'
                       : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground',
                   )}
                 >

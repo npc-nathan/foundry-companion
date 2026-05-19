@@ -142,6 +142,7 @@ export const THEME_VARIABLES = [
   '--sidebar-texture',
   '--sidebar-texture-blend',
   '--sidebar-texture-size',
+  '--sidebar-texture-bg',
   '--sidebar-edge',
   '--sidebar-edge-inset',
   '--sidebar-edge-width',

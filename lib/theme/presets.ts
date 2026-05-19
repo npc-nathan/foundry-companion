@@ -247,6 +247,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
       '--sidebar-texture': 'var(--bg-texture-parchment)',
       '--sidebar-texture-blend': 'multiply',
       '--sidebar-texture-size': '200px 200px',
+      '--sidebar-texture-bg': 'oklch(0.88 0.04 75)',
       '--sidebar-edge':
         'linear-gradient(90deg, transparent, oklch(0.65 0.15 55 / 0.4), transparent)',
       '--sidebar-edge-inset': 'auto 0 0 0',
@@ -322,6 +323,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
       '--sidebar-texture': 'var(--bg-texture-parchment)',
       '--sidebar-texture-blend': 'multiply',
       '--sidebar-texture-size': '200px 200px',
+      '--sidebar-texture-bg': 'oklch(0.15 0.025 45)',
       '--sidebar-edge': 'linear-gradient(90deg, transparent, oklch(0.5 0.1 50 / 0.4), transparent)',
       '--sidebar-edge-inset': 'auto 0 0 0',
       '--sidebar-edge-width': '100%',
