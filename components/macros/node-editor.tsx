@@ -158,7 +158,7 @@ const categoryColors: Record<NodeCategory, string> = {
 function MacroNodeComponent({ data, selected }: { data: CustomNodeData; selected: boolean }) {
   const isCondition = data.type === 'condition';
   const def = getNodeDefinition(data.type) || getModuleNodeDefinition(data.type);
-  const dataPorts = def?.ports || [];
+  const dataPorts: import('@/lib/nodes/types').PortDefinition[] = def?.ports || [];
 
   const dataTypeColor: Record<string, string> = {
     any: '!border-cyan-400 !bg-cyan-900/60',
@@ -673,7 +673,7 @@ function FlowCanvas({
         const sourceNode = nodes.find((n) => n.id === connection.source);
         const portId = connection.sourceHandle?.replace('data-out-', '');
         if (sourceNode && portId) {
-          const portDefs = (getNodeDefinition(sourceNode.data.type) || getModuleNodeDefinition(sourceNode.data.type))?.ports || [];
+          const portDefs: import('@/lib/nodes/types').PortDefinition[] = (getNodeDefinition(sourceNode.data.type) || getModuleNodeDefinition(sourceNode.data.type))?.ports || [];
           const portDef = portDefs.find((p) => p.id === portId);
           if (portDef) dataType = portDef.dataType;
         }
@@ -790,7 +790,7 @@ function FlowCanvas({
       if (!entry) return null;
       const sourceDef = getNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '') ||
         getModuleNodeDefinition(nodeMap.get(entry.sourceNodeId)?.data?.type || '');
-      const sourcePortDef = (sourceDef?.ports || []).find((p) => p.id === entry.sourcePortId);
+      const sourcePortDef = ((sourceDef?.ports || []) as import('@/lib/nodes/types').PortDefinition[]).find((p) => p.id === entry.sourcePortId);
       if (!sourcePortDef) return null;
       return dataVar(entry.sourceNodeId, entry.sourcePortId);
     }
@@ -1432,7 +1432,7 @@ function FlowCanvas({
               const nd = detailsDialogNode.data;
               const def = getNodeDefinition(nd.type) || getModuleNodeDefinition(nd.type);
               const schema = getNodeSchema(nd.type);
-              const dataPorts = def?.ports || [];
+              const dataPorts: import('@/lib/nodes/types').PortDefinition[] = def?.ports || [];
               const outputPorts = dataPorts.filter((p) => p.type === 'output');
               const inputPorts = dataPorts.filter((p) => p.type === 'input');
               const example = schema?.example;
