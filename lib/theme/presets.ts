@@ -13,6 +13,14 @@ export const presetThemes: Record<string, ThemeDefinition> = {
     id: 'default',
     name: 'Default',
     description: 'Clean, neutral shadcn default theme',
+    style: {
+      borderWidth: '1px',
+      borderWidthLg: '2px',
+      shadowGlow: 'oklch(0.5 0 0 / 0.25)',
+      transitionFast: '150ms',
+      transitionNormal: '250ms',
+      transitionSlow: '400ms',
+    },
     light: {
       '--background': 'oklch(1 0 0)',
       '--foreground': 'oklch(0.145 0 0)',
