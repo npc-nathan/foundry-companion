@@ -1169,7 +1169,6 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     ],
     codeGen: ({ d, indent, fieldVal, esc }) => {
       const macroName = String(d.macroName || '');
-      const macroRef = fieldVal('macroUuid', '');
       const dynPorts = (d.dynamicPorts || []) as MacroInputPort[];
       const lines: string[] = [
         indent + '// Run Macro: ' + macroName,
@@ -1186,9 +1185,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
         lines.push(indent + 'window.__macroArgs = { ' + argEntries.join(', ') + ' }');
       }
 
-      if (macroRef && macroRef !== macroName) {
-        lines.push(indent + 'await game.macros.get("' + esc(macroRef) + '")?.execute()');
-      } else if (macroName) {
+      if (macroName) {
         lines.push(indent + 'await game.macros.getName("' + esc(macroName) + '")?.execute()');
       }
 
