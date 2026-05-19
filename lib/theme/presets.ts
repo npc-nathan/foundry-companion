@@ -169,7 +169,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
     style: {
       borderWidth: '1.5px',
       borderWidthLg: '2.5px',
-      shadowGlow: '0 0 15px oklch(0.65 0.18 50 / 0.3)',
+      shadowGlow: 'oklch(0.65 0.18 50 / 0.3)',
       transitionFast: '200ms',
       transitionNormal: '300ms',
       transitionSlow: '500ms',
@@ -346,7 +346,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
     style: {
       borderWidth: '0.5px',
       borderWidthLg: '1px',
-      shadowGlow: '0 0 20px oklch(0.65 0.25 330 / 0.5)',
+      shadowGlow: 'oklch(0.65 0.25 330 / 0.5)',
       transitionFast: '100ms',
       transitionNormal: '200ms',
       transitionSlow: '350ms',
@@ -517,7 +517,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
     style: {
       borderWidth: '2px',
       borderWidthLg: '3px',
-      shadowGlow: '0 0 12px oklch(0.6 0.2 30 / 0.4)',
+      shadowGlow: 'oklch(0.6 0.2 30 / 0.4)',
       transitionFast: '150ms',
       transitionNormal: '300ms',
       transitionSlow: '500ms',
@@ -684,7 +684,7 @@ export const presetThemes: Record<string, ThemeDefinition> = {
     style: {
       borderWidth: '1px',
       borderWidthLg: '2px',
-      shadowGlow: '0 0 18px oklch(0.4 0.18 280 / 0.35)',
+      shadowGlow: 'oklch(0.4 0.18 280 / 0.35)',
       transitionFast: '200ms',
       transitionNormal: '300ms',
       transitionSlow: '450ms',
