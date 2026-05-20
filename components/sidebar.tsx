@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
-import { Users, Cog, MessageSquare, Dice5, ScrollText, Swords, Bug, BookOpen, PuzzleIcon } from 'lucide-react';
+import { Users, Cog, MessageSquare, Dice5, Dices, ScrollText, Swords, Bug, BookOpen, PuzzleIcon } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { sseManager } from '@/lib/sse';
 import { ThemeSwitcher } from '@/components/theme/ThemeSwitcher';
@@ -24,6 +24,7 @@ const gmNavItems = [
   { label: 'Dice', href: '/gm/dice', icon: Dice5 },
   { label: 'Macros', href: '/gm/macros', icon: PuzzleIcon },
   { label: 'Journals', href: '/gm/journals', icon: ScrollText },
+  { label: 'Roll Tables', href: '/gm/rolltables', icon: Dices },
   { label: 'Canvas', href: '/gm/canvas', icon: Swords },
   { label: 'Logs', href: '/gm/logs', icon: Bug },
 ];

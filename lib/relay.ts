@@ -520,4 +520,88 @@ export const relay = {
           }))
       )`,
     }),
+
+  // ─── Roll Tables ───────────────────────────────────────────
+
+  /** Get world roll tables from structure endpoint */
+  getRollTables: () =>
+    apiGet<unknown>('/structure', {
+      types: 'RollTable',
+      includeEntityData: 'true',
+      recursive: 'true',
+    }),
+
+  /** Get a single roll table by UUID (works for world and compendium) */
+  getRollTable: (uuid: string) => apiGet<unknown>('/get', { uuid }),
+
+  /** Roll a roll table and return results via execute-js */
+  rollTable: (uuid: string, createChatMessage?: boolean) =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `(async () => {
+        const table = await fromUuid("${uuid}");
+        if (!table) throw new Error("RollTable not found");
+        const roll = await table.roll({rollMode: "${createChatMessage ? 'publicroll' : 'gmroll'}"});
+        const results = Array.from(roll.results).map(r => ({
+          resultId: r.resultId,
+          text: r.getChatText(),
+          type: r.type,
+          collection: r.collection,
+          img: r.img,
+          name: r.text?.name || "",
+          range: [r.range[0], r.range[1]],
+          drawn: r.drawn
+        }));
+        return { total: roll.roll.total, formula: table.formula, results };
+      })()`,
+    }),
+
+  /** Draw a specific result from a roll table (for fudging/manual selection) */
+  drawTableResult: (uuid: string, resultId: string) =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `(async () => {
+        const table = await fromUuid("${uuid}");
+        if (!table) throw new Error("RollTable not found");
+        const draw = await table.draw({ results: [{ resultId: "${resultId}" }] });
+        return { success: true, drawn: draw.results?.length > 0 };
+      })()`,
+    }),
+
+  /** Create a new world roll table */
+  createRollTable: (data: {
+    name: string;
+    formula: string;
+    description?: string;
+    replacement?: boolean;
+    displayRoll?: boolean;
+    results?: Array<Record<string, unknown>>;
+    folder?: string;
+  }) => {
+    const { folder, ...rest } = data;
+    return apiPost('/create', {
+      entityType: 'RollTable',
+      data: {
+        name: rest.name,
+        formula: rest.formula,
+        description: rest.description || '',
+        replacement: rest.replacement ?? true,
+        displayRoll: rest.displayRoll ?? true,
+        results: rest.results || [],
+      },
+      ...(folder ? { folder } : {}),
+    });
+  },
+
+  /** Update a roll table */
+  updateRollTable: (uuid: string, data: Record<string, unknown>) =>
+    apiPut<unknown>('/update', { data }, { uuid }),
+
+  /** Delete a roll table */
+  deleteRollTable: (uuid: string) =>
+    fetch(`${getUrl('/delete')}?uuid=${uuid}`, {
+      method: 'DELETE',
+      headers: RELAY_HEADERS(),
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+      return r.text();
+    }),
 };

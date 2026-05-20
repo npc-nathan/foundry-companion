@@ -92,11 +92,12 @@ interface CompendiumEntryFull {
 
 // ─── D&D5e Type Mapping ──────────────────────────────────────
 /** Map dnd5e subtypes to document category */
-function dnd5eDocumentCategory(type: string): 'actor' | 'item' | 'journal' | 'other' {
+function dnd5eDocumentCategory(type: string): 'actor' | 'item' | 'journal' | 'rolltable' | 'other' {
   const t = type.toLowerCase();
   if (['npc', 'vehicle', 'character', 'group', 'loot', 'housing', 'robot', 'ship'].includes(t)) return 'actor';
   if (['weapon', 'equipment', 'consumable', 'tool', 'feat', 'spell', 'backpack', 'class', 'subclass', 'race', 'background', 'profession upgrade'].includes(t)) return 'item';
   if (t === 'journalentry') return 'journal';
+  if (t === 'rolltable') return 'rolltable';
   return 'other';
 }
 
@@ -244,6 +245,169 @@ function CompendiumJournalViewer({ entry }: { entry: { name?: string; pages?: Co
         )
       ) : (
         <p className="text-muted-foreground text-sm text-center py-4">Select a page</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Compendium Roll Table Viewer ─────────────────────────────
+
+interface RollTableResult {
+  _id: string;
+  type: string;
+  weight: number;
+  range: [number, number];
+  drawn: boolean;
+  name: string;
+  img?: string;
+  description: string;
+  collection?: string;
+  resultId?: string;
+}
+
+function CompendiumRollTableViewer({
+  entry,
+  uuid,
+}: {
+  entry: { name?: string; formula?: string; description?: string; results?: RollTableResult[]; replacement?: boolean; displayRoll?: boolean };
+  uuid: string;
+}) {
+  const [rolling, setRolling] = useState(false);
+  const [lastRoll, setLastRoll] = useState<{ total: number; formula: string; results: { text: string; img?: string; name?: string }[] } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const queryClient = useQueryClient();
+  const results = entry.results || [];
+
+  const handleRoll = useCallback(async () => {
+    setRolling(true);
+    try {
+      const res = await relay.rollTable(uuid, false);
+      const data = res as { success: boolean; result: string };
+      if (data?.result) {
+        const parsed = JSON.parse(data.result as string);
+        setLastRoll(parsed);
+      }
+    } catch (e) {
+      toast.error('Failed to roll table: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    } finally {
+      setRolling(false);
+    }
+  }, [uuid]);
+
+  const handleImport = useCallback(async () => {
+    setImporting(true);
+    try {
+      await relay.importCompendiumEntry(uuid);
+      toast.success('Roll table imported to world');
+      queryClient.invalidateQueries({ queryKey: ['rolltables'] });
+    } catch (e) {
+      toast.error('Failed to import: ' + (e instanceof Error ? e.message : 'Unknown error'));
+    } finally {
+      setImporting(false);
+    }
+  }, [uuid, queryClient]);
+
+  return (
+    <div className="space-y-3">
+      {/* Formula badge */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {entry.formula && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary text-xs font-mono font-bold">
+              <Dices className="h-3 w-3" />
+              {entry.formula}
+            </span>
+          )}
+          {entry.replacement !== undefined && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${entry.replacement ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/10 text-amber-600'}`}>
+              {entry.replacement ? 'Replace' : 'No Replace'}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="default" onClick={handleRoll} disabled={rolling} className="h-7 text-xs">
+            <Dices className="h-3 w-3 mr-1" />
+            {rolling ? 'Rolling...' : 'Roll'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleImport} disabled={importing} className="h-7 text-xs">
+            <Download className="h-3 w-3 mr-1" />
+            {importing ? 'Importing...' : 'Import'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Description */}
+      {entry.description ? (
+        <div
+          className="text-xs text-muted-foreground prose prose-sm dark:prose-invert max-w-none"
+          dangerouslySetInnerHTML={{ __html: entry.description }}
+        />
+      ) : null}
+
+      {/* Last roll result */}
+      {lastRoll && (
+        <div className="bg-primary/5 border border-primary/10 rounded-md p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-primary uppercase tracking-wider">Roll Result</span>
+            <span className="text-xs text-muted-foreground">
+              {lastRoll.formula} → <strong className="text-foreground">{lastRoll.total}</strong>
+            </span>
+          </div>
+          <div className="space-y-1">
+            {lastRoll.results.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs bg-background rounded px-2 py-1">
+                {r.img && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={r.img} alt="" className="h-4 w-4 rounded" />
+                )}
+                <span className="font-medium">{r.text || r.name || 'Result'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Results table */}
+      {results.length > 0 && (
+        <div>
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Table Results</h4>
+          <div className="border rounded-md overflow-hidden">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="text-left px-2.5 py-1.5 font-medium text-muted-foreground">Range</th>
+                  <th className="text-left px-2.5 py-1.5 font-medium text-muted-foreground">Weight</th>
+                  <th className="text-left px-2.5 py-1.5 font-medium text-muted-foreground">Result</th>
+                  <th className="text-left px-2.5 py-1.5 font-medium text-muted-foreground">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {results.map((r) => (
+                  <tr key={r._id} className={`hover:bg-muted/30 ${r.drawn ? 'opacity-50' : ''}`}>
+                    <td className="px-2.5 py-1.5 font-mono text-muted-foreground">
+                      {r.range[0]}{r.range[1] !== r.range[0] ? `–${r.range[1]}` : ''}
+                    </td>
+                    <td className="px-2.5 py-1.5 text-muted-foreground">{r.weight}</td>
+                    <td className="px-2.5 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        {r.img && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={r.img} alt="" className="h-4 w-4 rounded" />
+                        )}
+                        <span>{r.description || r.name || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-2.5 py-1.5">
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-muted text-muted-foreground uppercase font-medium">
+                        {r.type}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -789,6 +953,11 @@ export default function CompendiumPage() {
                         // ── Journal entries (no system field, uses pages) ──
                         if (cat === 'journal' || selectedEntry.data.pages) {
                           return <CompendiumJournalViewer entry={selectedEntry.data} />;
+                        }
+
+                        // ── Roll tables (detected by formula field) ──
+                        if (selectedEntry.data.formula) {
+                          return <CompendiumRollTableViewer entry={selectedEntry.data} uuid={selectedUuid!} />;
                         }
 
                         // ── Stat helpers (actor & item need system) ──
