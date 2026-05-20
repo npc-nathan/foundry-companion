@@ -11,7 +11,7 @@ import type { SheetTabProps } from './types';
 
 export function CombatTab({
   data, mutations, rolling, setDetailItem,
-  setRolling: _setRolling, uuid: _uuid,
+  setRolling: _setRolling, uuid: _uuid, readOnly,
 }: SheetTabProps) {
   const [damage, setDamage] = useState('');
   const [heal, setHeal] = useState('');
@@ -41,6 +41,7 @@ export function CombatTab({
                 style={{ width: `${Math.max(hp.pct, 0)}%` }}
               />
             </div>
+            {!readOnly && (<>
             <div className="flex gap-2 mt-3">
               <div className="flex-1 flex gap-1">
                 <Button
@@ -144,6 +145,7 @@ export function CombatTab({
                 {mutations.deathSaveMutation.isPending ? 'Rolling...' : 'Death Saving Throw'}
               </Button>
             )}
+            </>)}
           </CardContent>
         </Card>
 
@@ -256,7 +258,7 @@ export function CombatTab({
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {needsAttune && (
+                        {!readOnly && needsAttune && (
                           <Button
                             size="sm"
                             variant={attunement?.value ? 'default' : 'outline'}
@@ -311,6 +313,7 @@ export function CombatTab({
                           {!!typeField?.value && ` • ${String(typeField.value)}`}
                         </div>
                       </div>
+                      {!readOnly && (
                       <Button
                         size="sm"
                         variant={itemSys?.equipped ? 'default' : 'outline'}
@@ -326,6 +329,7 @@ export function CombatTab({
                       >
                         {itemSys?.equipped ? 'Equipped' : 'Carried'}
                       </Button>
+                      )}
                     </div>
                   );
                 })}

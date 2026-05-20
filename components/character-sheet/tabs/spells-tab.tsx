@@ -9,7 +9,7 @@ import type { SheetTabProps } from './types';
 
 export function SpellsTab({
   data, mutations, rolling, setDetailItem,
-  setRolling: _setRolling, uuid: _uuid,
+  setRolling: _setRolling, uuid: _uuid, readOnly,
 }: SheetTabProps) {
   const { spellSlots, spellItems, raw: rawData } = data;
   const combat = data.combat;
@@ -79,7 +79,7 @@ export function SpellsTab({
                     className="flex items-center gap-2 p-2 rounded bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
                     onClick={() => setDetailItem(spell)}
                   >
-                    {canPrepare ? (
+                    {canPrepare && !readOnly ? (
                       <button
                         type="button"
                         disabled={mutations.prepareSpellMutation.isPending}

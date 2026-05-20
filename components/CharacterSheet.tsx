@@ -28,10 +28,12 @@ function CharacterSheetInner({
   actorData,
   effectsData,
   uuid,
+  readOnly,
 }: {
   actorData: { data?: Record<string, unknown> };
   effectsData: { data?: FoundryEffect[] };
   uuid: string;
+  readOnly?: boolean;
 }) {
   const [detailItem, setDetailItem] = useState<FoundryItem | null>(null);
   const [rolling, setRolling] = useState<string | null>(null);
@@ -67,6 +69,7 @@ function CharacterSheetInner({
 
   const tabProps: SheetTabProps = {
     data,
+    readOnly,
     mutations: { ...mutations, doRoll },
     rolling,
     setRolling,
@@ -167,6 +170,7 @@ function CharacterSheetInner({
         attuneMutation={mutations.attuneMutation}
         doRoll={doRoll}
         rolling={rolling}
+        readOnly={readOnly}
       />
     </div>
   );
@@ -174,7 +178,7 @@ function CharacterSheetInner({
 
 /* ── Outer component (data fetching shell) ───────────────────────────────── */
 
-export default function CharacterSheet({ uuid, isLoading }: { uuid: string; isLoading?: boolean }) {
+export default function CharacterSheet({ uuid, isLoading, readOnly }: { uuid: string; isLoading?: boolean; readOnly?: boolean }) {
   const { data, isLoading: loading } = useQuery({
     queryKey: ['actor', uuid],
     queryFn: () => relay.get(uuid),
@@ -228,6 +232,7 @@ export default function CharacterSheet({ uuid, isLoading }: { uuid: string; isLo
       actorData={data as { data?: Record<string, unknown> }}
       effectsData={effectsData as { data?: FoundryEffect[] }}
       uuid={uuid}
+      readOnly={readOnly}
     />
   );
 }

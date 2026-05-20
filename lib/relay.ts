@@ -413,4 +413,111 @@ export const relay = {
       method: 'DELETE',
       headers: RELAY_HEADERS(),
     }).then((r) => r.text()),
+
+  // ─── Compendiums ──────────────────────────────────────────
+
+  /** List all compendium packs via execute-js */
+  getCompendiumPacks: () =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `return game.packs.map(p => ({
+        id: p.metadata.id,
+        name: p.metadata.name,
+        label: p.metadata.label,
+        collection: p.collection,
+        package: p.metadata.package,
+        packageName: p.metadata.packageName,
+        entityType: p.metadata.type,
+        path: "Compendium." + p.collection,
+        private: !!p.private,
+        size: p.index.size
+      }));`,
+    }),
+
+  /** Get contents of a compendium pack via execute-js (uses index — lightweight) */
+  getCompendiumPackContents: (packName: string) =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `return JSON.stringify(
+        (game.packs.get("${packName}")?.index?.contents || []).map(e => ({
+          _id: e._id,
+          name: e.name,
+          type: e.type,
+          img: e.img || null,
+          uuid: e.uuid,
+          folder: e.folder || null,
+          sort: e.sort || 0
+        }))
+      );`,
+    }),
+
+  /** Get a single compendium entry by UUID */
+  getCompendiumEntry: (uuid: string) => apiGet<unknown>('/get', { uuid }),
+
+  /** Create a new document in a compendium pack */
+  createCompendiumEntry: (packName: string, entityType: string, data: Record<string, unknown>) =>
+    apiPost('/execute-js', {
+      script: `(async () => {
+        const pack = game.packs.get("${packName}");
+        const doc = await pack.createDocument({type: "${entityType}", ...${JSON.stringify(data)}});
+        return { id: doc.id, uuid: doc.uuid, name: doc.name };
+      })()`,
+    }),
+
+  /** Update a document in a compendium pack */
+  updateCompendiumEntry: (uuid: string, data: Record<string, unknown>) =>
+    apiPost('/execute-js', {
+      script: `(async () => {
+        const doc = await fromUuid("${uuid}");
+        if (!doc) throw new Error("Document not found");
+        const updated = await doc.update(${JSON.stringify(data)});
+        return { id: updated.id, name: updated.name };
+      })()`,
+    }),
+
+  /** Delete a document from a compendium pack */
+  deleteCompendiumEntry: (uuid: string) =>
+    apiPost('/execute-js', {
+      script: `(async () => {
+        const doc = await fromUuid("${uuid}");
+        if (!doc) throw new Error("Document not found");
+        const packName = doc.pack;
+        const pack = game.packs.get(packName);
+        if (!pack) throw new Error("Pack not found");
+        await pack.deleteDocument(doc.id);
+        return { success: true, uuid: "${uuid}" };
+      })()`,
+    }),
+
+  /** Import a compendium entry into the world */
+  importCompendiumEntry: (uuid: string) =>
+    apiPost('/execute-js', {
+      script: `(async () => {
+        const doc = await fromUuid("${uuid}");
+        if (!doc) throw new Error("Document not found");
+        const imported = await doc.importToWorld();
+        return { id: imported.id, uuid: imported.uuid, name: imported.name, type: imported.documentName };
+      })()`,
+    }),
+
+  /** Search compendiums — uses /search which includes compendium results by default */
+  searchCompendiums: (query: string, limit = 100) =>
+    apiGet<unknown>('/search', { query, limit: String(limit) }),
+
+  /** Search within a specific compendium pack via execute-js */
+  searchCompendiumPack: (packName: string, query: string, limit = 200) =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `return JSON.stringify(
+        (game.packs.get("${packName}")?.index?.contents || [])
+          .filter(e => !"${query}" || e.name.toLowerCase().includes("${query}".toLowerCase()))
+          .slice(0, ${limit})
+          .map(e => ({
+            _id: e._id,
+            name: e.name,
+            type: e.type,
+            img: e.img || null,
+            uuid: "Compendium.${packName}." + e.type + "." + e._id,
+            folder: e.folder || null,
+            sort: e.sort || 0
+          }))
+      )`,
+    }),
 };

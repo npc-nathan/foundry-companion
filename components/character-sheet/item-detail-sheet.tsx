@@ -25,6 +25,7 @@ interface ItemDetailSheetProps {
   attuneMutation: TabMutation;
   doRoll: (label: string, formula: string) => Promise<void>;
   rolling: string | null;
+  readOnly?: boolean;
 }
 
 export function ItemDetailSheet({
@@ -33,6 +34,7 @@ export function ItemDetailSheet({
   attuneMutation,
   doRoll,
   rolling,
+  readOnly,
 }: ItemDetailSheetProps) {
   const detailImage = item?.img
     ? `/api/relay/download?path=${encodeURIComponent(item.img)}&source=data`
@@ -227,7 +229,7 @@ export function ItemDetailSheet({
             ) : null}
 
             {/* Attunement */}
-            {(item.system?.attunement as Record<string, unknown>) && (
+            {!readOnly && (item.system?.attunement as Record<string, unknown>) && (
               <div className="mb-3">
                 {(() => {
                   const att = item.system?.attunement as Record<string, unknown>;
@@ -277,7 +279,7 @@ export function ItemDetailSheet({
               )}
             </div>
 
-            {item.type === 'weapon' && buildDamageFormula(item) && (
+            {!readOnly && item.type === 'weapon' && buildDamageFormula(item) && (
               <div className="mt-4">
                 <Button
                   className="w-full"

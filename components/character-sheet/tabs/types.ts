@@ -10,6 +10,7 @@ export interface TabMutation {
 
 export interface SheetTabProps {
   data: ActorData;
+  readOnly?: boolean;
   mutations: {
     damageMutation: TabMutation;
     healMutation: TabMutation;

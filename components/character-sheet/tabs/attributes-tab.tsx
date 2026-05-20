@@ -8,7 +8,7 @@ import { ABILITY_NAMES, getMod } from '@/components/character-sheet/types';
 import { relay } from '@/lib/relay';
 import type { SheetTabProps } from './types';
 
-export function AttributesTab({ data, mutations, rolling, setRolling, uuid }: SheetTabProps) {
+export function AttributesTab({ data, mutations, rolling, setRolling, uuid, readOnly }: SheetTabProps) {
   const { abilities, skills, saves } = data;
 
   return (
@@ -32,7 +32,7 @@ export function AttributesTab({ data, mutations, rolling, setRolling, uuid }: Sh
                 <button
                   key={ab}
                   type="button"
-                  disabled={isRolling || mutations.abilityCheckMutation.isPending}
+                  disabled={isRolling || mutations.abilityCheckMutation.isPending || readOnly}
                   onClick={() => mutations.abilityCheckMutation.mutate(ab)}
                   className="text-center p-3 rounded-lg bg-muted/50 border cursor-pointer hover:bg-muted/80 hover:border-primary/30 transition-colors disabled:opacity-50"
                 >
@@ -69,7 +69,7 @@ export function AttributesTab({ data, mutations, rolling, setRolling, uuid }: Sh
                 <button
                   key={skill.key}
                   type="button"
-                  disabled={isRolling || mutations.skillCheckMutation.isPending}
+                  disabled={isRolling || mutations.skillCheckMutation.isPending || readOnly}
                   onClick={() => mutations.skillCheckMutation.mutate(skill.key)}
                   className={`flex items-center justify-between px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-muted/60 hover:border hover:border-primary/20 transition-colors disabled:opacity-50 ${skill.proficient ? 'bg-muted/40 font-medium' : ''}`}
                 >
@@ -105,7 +105,7 @@ export function AttributesTab({ data, mutations, rolling, setRolling, uuid }: Sh
                 <button
                   key={save.ability}
                   type="button"
-                  disabled={isRolling}
+                  disabled={isRolling || readOnly}
                   onClick={() => {
                     setRolling(`save-${save.ability}`);
                     relay
