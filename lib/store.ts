@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Party } from '@/lib/chat-types';
 
 interface Config {
   relayUrl: string;
@@ -30,6 +31,11 @@ interface AppState {
   status: Status;
   ui: UIConfig;
 
+  activeUserDm: string | null;
+  activePartyDm: Party | null;
+  mutedUsers: string[];
+  parties: Party[];
+
   setConfig: (config: Partial<Config>) => void;
   setConnected: (connected: boolean) => void;
   setStatus: (status: 'connected' | 'connecting' | 'disconnected') => void;
@@ -38,6 +44,15 @@ interface AppState {
   toggleTheme: () => void;
   setThemePreset: (preset: string) => void;
   reset: () => void;
+
+  setActiveUserDm: (userId: string | null) => void;
+  setActivePartyDm: (party: Party | null) => void;
+  setMutedUsers: (userIds: string[]) => void;
+  toggleMuteUser: (userId: string) => void;
+  addParty: (party: Party) => void;
+  removeParty: (partyId: string) => void;
+  addPartyMember: (partyId: string, userId: string) => void;
+  removePartyMember: (partyId: string, userId: string) => void;
 }
 
 const defaultConfig: Config = {
@@ -67,6 +82,11 @@ export const useStore = create<AppState>()(
       config: defaultConfig,
       status: defaultStatus,
       ui: defaultUi,
+
+      activeUserDm: null,
+      activePartyDm: null,
+      mutedUsers: [],
+      parties: [],
 
       setConfig: (partial) => {
         set({ config: { ...get().config, ...partial } });
@@ -105,6 +125,53 @@ export const useStore = create<AppState>()(
 
       reset: () => {
         set({ config: defaultConfig, status: defaultStatus });
+      },
+
+      setActiveUserDm: (userId) => {
+        set({ activeUserDm: userId, activePartyDm: null });
+      },
+
+      setActivePartyDm: (party) => {
+        set({ activePartyDm: party, activeUserDm: null });
+      },
+
+      setMutedUsers: (userIds) => {
+        set({ mutedUsers: userIds });
+      },
+
+      toggleMuteUser: (userId) => {
+        const { mutedUsers } = get();
+        if (mutedUsers.includes(userId)) {
+          set({ mutedUsers: mutedUsers.filter((id) => id !== userId) });
+        } else {
+          set({ mutedUsers: [...mutedUsers, userId] });
+        }
+      },
+
+      addParty: (party) => {
+        set({ parties: [...get().parties, party] });
+      },
+
+      removeParty: (partyId) => {
+        set({ parties: get().parties.filter((p) => p.id !== partyId) });
+      },
+
+      addPartyMember: (partyId, userId) => {
+        set({
+          parties: get().parties.map((p) =>
+            p.id === partyId && !p.memberIds.includes(userId)
+              ? { ...p, memberIds: [...p.memberIds, userId] }
+              : p,
+          ),
+        });
+      },
+
+      removePartyMember: (partyId, userId) => {
+        set({
+          parties: get().parties.map((p) =>
+            p.id === partyId ? { ...p, memberIds: p.memberIds.filter((id) => id !== userId) } : p,
+          ),
+        });
       },
     }),
     {
