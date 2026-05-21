@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import CharacterSheet from '@/components/CharacterSheet';
+import SystemItemViewer from '@/components/character-sheet/system-item-viewer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +49,13 @@ import {
   Video,
   X,
 } from 'lucide-react';
+
+// ─── Helpers ────────────────────────────────────────────────
+
+function imgUrl(path: string | null | undefined): string {
+  if (!path) return '/api/relay/download?path=icons/svg/mystery-man.svg&source=data';
+  return `/api/relay/download?path=${encodeURIComponent(path)}&source=data`;
+}
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -99,6 +108,126 @@ function dnd5eDocumentCategory(type: string): 'actor' | 'item' | 'journal' | 'ro
   if (t === 'journalentry') return 'journal';
   if (t === 'rolltable') return 'rolltable';
   return 'other';
+}
+
+// ─── Type Tab Mapping ──────────────────────────────────────
+
+const TYPE_TABS: Record<string, { label: string; types: string[] }> = {
+  all: { label: 'All', types: [] },
+  weapon: { label: 'Weapons', types: ['weapon', 'ammunition'] },
+  armor: { label: 'Armor', types: ['armor', 'shield'] },
+  spell: { label: 'Spells', types: ['spell'] },
+  npc: { label: 'Monsters', types: ['npc', 'character', 'vehicle', 'group'] },
+  item: {
+    label: 'Items',
+    types: ['consumable', 'loot', 'tool', 'backpack', 'equipment'],
+  },
+  feat: {
+    label: 'Features',
+    types: ['feat', 'class', 'subclass', 'background', 'race'],
+  },
+};
+
+/** Extract structured query tokens from search text */
+function parseStructuredQuery(
+  text: string,
+): { plain: string; filters: Record<string, string> } {
+  const filters: Record<string, string> = {};
+  const tokens = text.split(/\s+/);
+  const plainTokens: string[] = [];
+  for (const token of tokens) {
+    const match = token.match(/^(\w+):(.+)$/);
+    if (match) {
+      filters[match[1].toLowerCase()] = match[2].toLowerCase();
+    } else {
+      plainTokens.push(token);
+    }
+  }
+  return { plain: plainTokens.join(' '), filters };
+}
+
+// getPropertyOptions removed — index data doesn't include system fields
+
+/** Filter entries by type tab and search text */
+function filterEntries(
+  entries: CompendiumEntry[],
+  activeTab: string,
+  searchText: string,
+): CompendiumEntry[] {
+  let result = entries;
+
+  // Filter by type tab
+  if (activeTab !== 'all') {
+    const allowedTypes = TYPE_TABS[activeTab]?.types || [];
+    result = result.filter((e) =>
+      allowedTypes.includes(e.type?.toLowerCase()),
+    );
+  }
+
+  // Parse structured query
+  const { plain, filters } = parseStructuredQuery(searchText);
+
+  // Apply structured filters
+  if (filters.type) {
+    result = result.filter(
+      (e) => e.type?.toLowerCase() === filters.type,
+    );
+  }
+  if (filters.damage) {
+    result = result.filter((e) => {
+      const sys = e.system as Record<string, unknown> | undefined;
+      const dmg = sys?.damage as Record<string, unknown> | undefined;
+      const base = dmg?.base as Record<string, unknown> | undefined;
+      const dmgTypes = (base?.types as string[] | undefined) || [];
+      return dmgTypes.some((dt) => dt.toLowerCase().includes(filters.damage));
+    });
+  }
+  if (filters.rarity) {
+    result = result.filter((e) => {
+      const sys = e.system as Record<string, unknown> | undefined;
+      const rarity = sys?.rarity as string | undefined;
+      return rarity?.toLowerCase() === filters.rarity;
+    });
+  }
+  if (filters.level) {
+    const levelNum = parseInt(filters.level, 10);
+    if (!isNaN(levelNum)) {
+      result = result.filter((e) => {
+        const sys = e.system as Record<string, unknown> | undefined;
+        return (sys?.level as number) === levelNum;
+      });
+    }
+  }
+  if (filters.cr) {
+    result = result.filter((e) => {
+      const sys = e.system as Record<string, unknown> | undefined;
+      const details = sys?.details as Record<string, unknown> | undefined;
+      return String(details?.cr) === filters.cr;
+    });
+  }
+  if (filters.school) {
+    result = result.filter((e) => {
+      const sys = e.system as Record<string, unknown> | undefined;
+      const school = sys?.school as Record<string, unknown> | undefined;
+      return String(school?.value).toLowerCase() === filters.school;
+    });
+  }
+  if (filters.armortype || filters.armor) {
+    const armorFilter = (filters.armortype || filters.armor)!;
+    result = result.filter((e) => {
+      const sys = e.system as Record<string, unknown> | undefined;
+      const armor = sys?.armor as Record<string, unknown> | undefined;
+      return String(armor?.type).toLowerCase() === armorFilter;
+    });
+  }
+
+  // Apply plain text search (name only)
+  if (plain.trim()) {
+    const q = plain.toLowerCase();
+    result = result.filter((e) => e.name.toLowerCase().includes(q));
+  }
+
+  return result;
 }
 
 /** Format a dnd5e subtype for display */
@@ -157,6 +286,7 @@ interface CompendiumJournalPage {
   video?: { controls?: boolean; volume?: number };
   src?: string | null;
   sort?: number;
+  system?: Record<string, unknown>;
 }
 
 function CompendiumJournalViewer({ entry }: { entry: { name?: string; pages?: CompendiumJournalPage[] } }) {
@@ -209,7 +339,7 @@ function CompendiumJournalViewer({ entry }: { entry: { name?: string; pages?: Co
               <div className="space-y-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={currentPage.src}
+                  src={imgUrl(currentPage.src)}
                   alt={currentPage.name}
                   className="max-w-full rounded-md"
                 />
@@ -227,7 +357,7 @@ function CompendiumJournalViewer({ entry }: { entry: { name?: string; pages?: Co
           <div>
             {currentPage.src ? (
               <video
-                src={currentPage.src}
+                src={imgUrl(currentPage.src)}
                 controls={currentPage.video?.controls ?? true}
                 className="max-w-full rounded-md"
               />
@@ -236,12 +366,19 @@ function CompendiumJournalViewer({ entry }: { entry: { name?: string; pages?: Co
             )}
           </div>
         ) : (
-          <div
-            className="prose prose-sm dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{
-              __html: currentPage.text?.content || '<p>No content</p>',
-            }}
-          />
+          <>
+            {(currentPage.system?.item || currentPage.system?.actor) && (
+              <SystemItemViewer
+                systemItemUuid={String(currentPage.system?.item || currentPage.system?.actor)}
+              />
+            )}
+            <div
+              className="prose prose-sm dark:prose-invert max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: rewriteRelayContent(currentPage.text?.content || '<p>No content</p>'),
+              }}
+            />
+          </>
         )
       ) : (
         <p className="text-muted-foreground text-sm text-center py-4">Select a page</p>
@@ -340,7 +477,7 @@ function CompendiumRollTableViewer({
       {entry.description ? (
         <div
           className="text-xs text-muted-foreground prose prose-sm dark:prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: entry.description }}
+          dangerouslySetInnerHTML={{ __html: rewriteRelayContent(entry.description) }}
         />
       ) : null}
 
@@ -358,7 +495,7 @@ function CompendiumRollTableViewer({
               <div key={i} className="flex items-center gap-2 text-xs bg-background rounded px-2 py-1">
                 {r.img && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.img} alt="" className="h-4 w-4 rounded" />
+                  <img src={imgUrl(r.img)} alt="" className="h-4 w-4 rounded" />
                 )}
                 <span className="font-medium">{r.text || r.name || 'Result'}</span>
               </div>
@@ -392,7 +529,7 @@ function CompendiumRollTableViewer({
                       <div className="flex items-center gap-1.5">
                         {r.img && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.img} alt="" className="h-4 w-4 rounded" />
+                          <img src={imgUrl(r.img)} alt="" className="h-4 w-4 rounded" />
                         )}
                         <span>{r.description || r.name || '—'}</span>
                       </div>
@@ -438,6 +575,10 @@ export default function CompendiumPage() {
   const [search, setSearch] = useState('');
   const [selectedUuid, setSelectedUuid] = useState<string | null>(null);
   const [expandedPacks, setExpandedPacks] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState('all');
+  const [searchAllResults, setSearchAllResults] = useState<Record<string, CompendiumEntry[]> | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
@@ -619,25 +760,16 @@ export default function CompendiumPage() {
 
   const filterPacks = useCallback(
     (pack: CompendiumPack) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        pack.label.toLowerCase().includes(q) ||
-        pack.name.toLowerCase().includes(q) ||
-        pack.package?.toLowerCase().includes(q) ||
-        pack.entityType?.toLowerCase().includes(q)
-      );
+      // Don't filter pack rows by search text — entry-level
+      // filtering via filterEntries handles that. When search or
+      // type tab is active, auto-expand shows all packs' entries.
+      return true;
     },
-    [search],
+    [],
   );
 
   const totalEntries = packs.reduce((sum, p) => sum + p.size, 0);
-  const filteredPackCount = search
-    ? Object.values(packsByPackage).reduce(
-        (sum, group) => sum + group.filter(filterPacks).length,
-        0,
-      )
-    : packs.length;
+  const filteredPackCount = packs.length;
 
   // ─── Select entry ─────────────────────────────────────────
 
@@ -680,6 +812,54 @@ export default function CompendiumPage() {
     [packs],
   );
 
+  // ─── Search all packs via single relay call (debounced) ──────
+
+  useEffect(() => {
+    const isSearchActive = search.trim().length > 0;
+    const isTabActive = activeTab !== 'all';
+
+    if (!isSearchActive && !isTabActive) {
+      // Both cleared — clear search results, revert to normal browsing
+      setSearchAllResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    // Clear any pending search
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Debounce 300ms
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const raw = await relay.searchAllPacks(search, isTabActive ? activeTab : null, 200);
+        const data = raw as { success?: boolean; result?: Record<string, unknown[]> };
+        const result = data?.result;
+        if (result && typeof result === 'object') {
+          const parsed: Record<string, CompendiumEntry[]> = {};
+          for (const [packId, entries] of Object.entries(result)) {
+            if (Array.isArray(entries)) {
+              parsed[packId] = entries as CompendiumEntry[];
+            }
+          }
+          setSearchAllResults(parsed);
+        } else {
+          setSearchAllResults({});
+        }
+      } catch {
+        setSearchAllResults({});
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
+  }, [search, activeTab]);
+
   // ─── Render ───────────────────────────────────────────────
 
   return (
@@ -705,7 +885,7 @@ export default function CompendiumPage() {
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Filter packs..."
+                placeholder="Filter packs & entries by name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-9"
@@ -715,6 +895,26 @@ export default function CompendiumPage() {
               {filteredPackCount} pack{filteredPackCount !== 1 ? 's' : ''}
             </p>
           </CardHeader>
+          {/* Type tab bar */}
+          <div className="px-3 pb-2 shrink-0 space-y-1">
+            <div className="flex flex-wrap gap-1">
+              {Object.entries(TYPE_TABS).map(([key, tab]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setActiveTab(key);
+                  }}
+                  className={`text-xs px-2 py-1 rounded-md transition-colors ${
+                    activeTab === key
+                      ? 'bg-primary text-primary-foreground font-medium'
+                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <CardContent className="p-0 flex-1 min-h-0">
             <ScrollArea className="h-full">
               {packsLoading ? (
@@ -722,6 +922,60 @@ export default function CompendiumPage() {
               ) : packs.length === 0 ? (
                 <div className="p-4 text-sm text-muted-foreground text-center">
                   No compendium packs found
+                </div>
+              ) : searchAllResults !== null ? (
+                <div className="p-2 space-y-1">
+                  {isSearching && (
+                    <div className="px-2 py-1 text-xs text-muted-foreground animate-pulse">
+                      Searching...
+                    </div>
+                  )}
+                  {(() => {
+                    const entries = Object.entries(searchAllResults);
+                    if (entries.length === 0 && !isSearching) {
+                      return (
+                        <div className="p-4 text-sm text-muted-foreground text-center">
+                          No matching entries found
+                        </div>
+                      );
+                    }
+                    return entries.map(([packId, packEntries]) => {
+                      const pack = packs.find((p) => p.id === packId);
+                      if (!pack || packEntries.length === 0) return null;
+                      return (
+                        <div key={packId}>
+                          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm">
+                            <EntityTypeIcon type={pack.entityType} />
+                            <span className="truncate flex-1 text-left">{pack.label}</span>
+                            <span className="text-[10px] tabular-nums text-muted-foreground">
+                              {packEntries.length}
+                            </span>
+                          </div>
+                          <div className="ml-4 border-l pl-1 space-y-0.5">
+                            {packEntries.map((entry) => {
+                              const uuid =
+                                entry.uuid ||
+                                `Compendium.${packId}.${entry.type}.${entry._id}`;
+                              return (
+                                <button
+                                  key={entry._id}
+                                  onClick={() => selectEntry(uuid)}
+                                  className={`flex items-center gap-2 w-full px-2 py-1 rounded-md text-sm transition-colors ${
+                                    selectedUuid === uuid
+                                      ? 'bg-accent text-accent-foreground font-medium'
+                                      : 'text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground'
+                                  }`}
+                                >
+                                  <EntityTypeIcon type={entry.type || pack.entityType} />
+                                  <span className="truncate flex-1 text-left">{entry.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               ) : (
                 <div className="p-2 space-y-1">
@@ -762,8 +1016,24 @@ export default function CompendiumPage() {
                                         ? '(empty)'
                                         : 'Loading...'}
                                     </p>
-                                  ) : (
-                                    entries.map((entry) => {
+                                  ) : (() => {
+                                    const filteredEntries = filterEntries(entries, activeTab, search);
+                                    const totalFiltered = filteredEntries.length;
+                                    if (totalFiltered === 0) {
+                                      return (
+                                        <p className="px-2 py-1 text-xs text-muted-foreground italic">
+                                          No matches
+                                        </p>
+                                      );
+                                    }
+                                    return (
+                                      <>
+                                        {totalFiltered < entries.length && (
+                                          <p className="px-2 py-0.5 text-[10px] text-muted-foreground">
+                                            {totalFiltered} of {entries.length}
+                                          </p>
+                                        )}
+                                        {filteredEntries.map((entry) => {
                                       const uuid = entry.uuid || `Compendium.${pack.id}.${pack.entityType.charAt(0).toUpperCase() + pack.entityType.slice(1)}.${entry._id}`;
                                       return (
                                         <button
@@ -781,8 +1051,10 @@ export default function CompendiumPage() {
                                           </span>
                                         </button>
                                       );
-                                    })
-                                  )}
+                                    })}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -817,7 +1089,7 @@ export default function CompendiumPage() {
                 <div className="min-w-0 flex-1 flex items-center gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={selectedEntry.data.img || 'icons/svg/mystery-man.svg'}
+                    src={imgUrl(selectedEntry.data.img)}
                     alt=""
                     className="h-10 w-10 rounded object-cover border"
                   />
@@ -904,10 +1176,12 @@ export default function CompendiumPage() {
                           className="prose prose-sm dark:prose-invert max-w-none"
                           dangerouslySetInnerHTML={{
                             __html:
-                              ((
-                                selectedEntry.data.system as Record<string, unknown>
-                              )?.description as Record<string, unknown>)?.value as string ||
-                              'No description',
+                              rewriteRelayContent(
+                                ((
+                                  selectedEntry.data.system as Record<string, unknown>
+                                )?.description as Record<string, unknown>)?.value as string ||
+                                  'No description',
+                              ),
                           }}
                         />
                       </div>

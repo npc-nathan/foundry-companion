@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import { toast } from 'sonner';
 import { Send, MessageSquare } from 'lucide-react';
 
@@ -148,7 +149,7 @@ export default function PlayerChatPage() {
                         {msg.flavor}
                       </span>
                     )}
-                    <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
+                    <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: rewriteRelayContent(msg.content) }} />
                   </div>
                   {msg.timestamp && (
                     <span className="text-[10px] text-muted-foreground shrink-0">

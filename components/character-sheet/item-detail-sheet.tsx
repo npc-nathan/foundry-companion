@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import {
   Sheet,
   SheetContent,
@@ -270,8 +271,8 @@ export function ItemDetailSheet({
                 <div
                   className="text-sm prose prose-sm prose-invert max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 leading-relaxed"
                   dangerouslySetInnerHTML={{
-                    __html: (item.system?.description as Record<string, unknown>)
-                      .value as string,
+                    __html: rewriteRelayContent((item.system?.description as Record<string, unknown>)
+                        .value as string),
                   }}
                 />
               ) : (

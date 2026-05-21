@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import CharacterSheet from '@/components/CharacterSheet';
+import SystemItemViewer from '@/components/character-sheet/system-item-viewer';
 import {
   BookOpen,
   BookText,
@@ -38,6 +41,7 @@ import {
   X,
   Image,
   Video,
+  Loader2,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -53,12 +57,13 @@ interface JournalStub {
 interface JournalPage {
   _id: string;
   name: string;
-  type: 'text' | 'image' | 'video' | 'pdf';
+  type: 'text' | 'image' | 'video' | 'pdf' | 'class' | 'subclass' | 'race' | 'background' | 'spell' | 'stats';
   text?: { content: string; format: number };
   image?: { caption: string };
   video?: { controls: boolean; volume: number };
   src?: string | null;
   sort: number;
+  system?: Record<string, unknown>;
 }
 
 interface JournalFull {
@@ -180,6 +185,9 @@ function PageTypeIcon({ type }: { type: string }) {
       return <BookText className="h-3 w-3" />;
   }
 }
+
+// ─── System Item Viewer ─────────────────────────────────────
+// Renders a referenced compendium entry (item or actor) inside a journal page.
 
 // ─── Main Page ──────────────────────────────────────────────
 
@@ -422,6 +430,7 @@ export default function JournalsPage() {
           src: null,
           ownership: {},
           sort: existing.length + i,
+          system: {} as Record<string, unknown>,
         })),
       ];
     }
@@ -806,7 +815,7 @@ export default function JournalsPage() {
                           <div className="space-y-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={currentPage.src}
+                              src={`/api/relay/download?path=${encodeURIComponent(currentPage.src)}&source=data`}
                               alt={currentPage.name}
                               className="max-w-full rounded-md"
                             />
@@ -826,7 +835,7 @@ export default function JournalsPage() {
                       <div className="p-4">
                         {currentPage.src ? (
                           <video
-                            src={currentPage.src}
+                            src={`/api/relay/download?path=${encodeURIComponent(currentPage.src)}&source=data`}
                             controls={currentPage.video?.controls ?? true}
                             className="max-w-full rounded-md"
                           />
@@ -837,12 +846,19 @@ export default function JournalsPage() {
                         )}
                       </div>
                     ) : (
-                      <div
-                        className="p-4 prose prose-sm dark:prose-invert max-w-none"
-                        dangerouslySetInnerHTML={{
-                          __html: currentPage.text?.content || '<p>No content</p>',
-                        }}
-                      />
+                      <>
+                        {(currentPage.system?.item || currentPage.system?.actor) && viewMode === 'view' && (
+                          <SystemItemViewer
+                            systemItemUuid={String(currentPage.system?.item || currentPage.system?.actor)}
+                          />
+                        )}
+                        <div
+                          className="p-4 prose prose-sm dark:prose-invert max-w-none"
+                          dangerouslySetInnerHTML={{
+                            __html: rewriteRelayContent(currentPage.text?.content || '<p>No content</p>'),
+                          }}
+                        />
+                      </>
                     )
                   ) : editPageIndex >= pages.length && viewMode === 'edit' ? (
                     <div className="p-4 space-y-3">

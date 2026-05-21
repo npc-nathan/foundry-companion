@@ -518,7 +518,46 @@ export const relay = {
             folder: e.folder || null,
             sort: e.sort || 0
           }))
-      )`,
+      );`,
+    }),
+
+  /** Search ALL compendium packs at once — single execute-js call, returns entries grouped by pack */
+  searchAllPacks: (query: string, typeFilter?: string | null, limitPerPack = 100) =>
+    apiPost<{ success: boolean; result: unknown }>('/execute-js', {
+      script: `return (() => {
+          const q = "${query || ''}".toLowerCase();
+          const rawFilter = "${typeFilter || ''}";
+          const typeMap = {
+            weapon: ["weapon", "ammunition"],
+            armor: ["armor", "shield"],
+            spell: ["spell"],
+            npc: ["npc", "character", "vehicle", "group"],
+            item: ["consumable", "loot", "tool", "backpack", "equipment"],
+            feat: ["feat", "class", "subclass", "background", "race"],
+          };
+          const allowedTypes = rawFilter ? (typeMap[rawFilter] || [rawFilter]) : null;
+          const limit = ${limitPerPack};
+          const results = {};
+          for (const [key, pack] of game.packs.entries()) {
+            const entries = (pack.index?.contents || [])
+              .filter(e => {
+                if (q && !e.name.toLowerCase().includes(q)) return false;
+                if (allowedTypes && !allowedTypes.includes(e.type?.toLowerCase())) return false;
+                return true;
+              });
+            if (entries.length === 0) continue;
+            results[key] = entries.slice(0, limit).map(e => ({
+              _id: e._id,
+              name: e.name,
+              type: e.type,
+              img: e.img || null,
+              uuid: "Compendium." + key + "." + e.type + "." + e._id,
+              folder: e.folder || null,
+              sort: e.sort || 0,
+            }));
+          }
+          return results;
+        })();`,
     }),
 
   // ─── Roll Tables ───────────────────────────────────────────

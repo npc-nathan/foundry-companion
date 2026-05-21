@@ -129,6 +129,21 @@
   }
 }
 
+/* UUID cross-reference links in rendered Foundry content */
+.uuid-link {
+  color: hsl(var(--accent));
+  text-decoration-line: underline;
+  text-underline-offset: 2px;
+  text-decoration-style: dotted;
+  text-decoration-color: color-mix(in srgb, hsl(var(--accent)) 50%, transparent);
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+.uuid-link:hover {
+  filter: brightness(1.2);
+  text-decoration-style: solid;
+}
+
 /* Background textures (SVG data URIs — geometric noise, no SVG filters, always render) */
 :root {
   --bg-texture-parchment: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+CiAgPGRlZnM+CiAgICA8ZmlsdGVyIGlkPSJncmFpbiIgeD0iMCIgeT0iMCIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSI+CiAgICAgIDxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjg1IiBudW1PY3RhdmVzPSI0IiBzZWVkPSI0MiIgcmVzdWx0PSJub2lzZSIvPgogICAgICA8ZmVDb2xvck1hdHJpeCB0eXBlPSJzYXR1cmF0ZSIgdmFsdWVzPSIwIiBpbj0ibm9pc2UiIHJlc3VsdD0iZ3JleU5vaXNlIi8+CiAgICAgIDxmZUNvbXBvbmVudFRyYW5zZmVyIGluPSJncmV5Tm9pc2UiIHJlc3VsdD0iY29udHJhc3ROb2lzZSI+CiAgICAgICAgPGZlRnVuY0EgdHlwZT0ibGluZWFyIiBzbG9wZT0iMC44Ii8+CiAgICAgIDwvZmVDb21wb25lbnRUcmFuc2Zlcj4KICAgICAgPGZlQmxlbmQgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iY29udHJhc3ROb2lzZSIgbW9kZT0ibXVsdGlwbHkiLz4KICAgIDwvZmlsdGVyPgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2Y1ZTZjOCIgZmlsdGVyPSJ1cmwoI2dyYWluKSIvPgo8L3N2Zz4=');

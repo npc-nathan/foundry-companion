@@ -1,5 +1,6 @@
 'use client';
 
+import { rewriteRelayContent } from '@/lib/relay-html';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles } from 'lucide-react';
 import type { SheetTabProps } from './types';
@@ -24,7 +25,7 @@ export function FeaturesTab({ data }: SheetTabProps) {
               <div
                 className="text-sm prose-sm prose-invert max-w-none [&_p]:mb-1"
                 dangerouslySetInnerHTML={{
-                  __html: traits.biography,
+                  __html: rewriteRelayContent(traits.biography),
                 }}
               />
             </div>

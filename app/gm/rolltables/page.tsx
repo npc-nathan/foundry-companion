@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { relay } from '@/lib/relay';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -147,7 +148,7 @@ function FolderTreeItem({
               }`}
               style={{ paddingLeft: `${(depth + 1) * 12 + 8}px` }}
             >
-              <EntryIcon formula={entry.formula} />
+              <EntryIcon />
               <span className="truncate">{entry.name}</span>
               {entry.formula && (
                 <span className="text-[10px] ml-auto px-1 py-0.5 rounded bg-primary/10 text-primary font-mono">
@@ -237,7 +238,7 @@ function RollTableViewer({
       {entry.description ? (
         <div
           className="text-muted-foreground prose prose-sm dark:prose-invert max-w-none"
-          dangerouslySetInnerHTML={{ __html: entry.description }}
+          dangerouslySetInnerHTML={{ __html: rewriteRelayContent(entry.description) }}
         />
       ) : null}
 
@@ -255,7 +256,7 @@ function RollTableViewer({
               <div key={i} className="flex items-center gap-2 text-xs bg-background rounded px-2 py-1">
                 {r.img && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.img} alt="" className="h-4 w-4 rounded" />
+                  <img src={`/api/relay/download?path=${encodeURIComponent(r.img)}&source=data`} alt="" className="h-4 w-4 rounded" />
                 )}
                 <span className="font-medium">{r.text || 'Result'}</span>
               </div>
@@ -292,7 +293,7 @@ function RollTableViewer({
                       <div className="flex items-center gap-2">
                         {r.img && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.img} alt="" className="h-5 w-5 rounded flex-shrink-0" />
+                          <img src={`/api/relay/download?path=${encodeURIComponent(r.img)}&source=data`} alt="" className="h-5 w-5 rounded flex-shrink-0" />
                         )}
                         <span className="font-medium">{r.description || r.name || '—'}</span>
                       </div>
@@ -603,7 +604,7 @@ export default function RollTablesPage() {
                               : 'hover:bg-muted/50'
                           }`}
                         >
-                          <EntryIcon formula={entry.formula} />
+                          <EntryIcon />
                           <span className="truncate">{entry.name}</span>
                           {entry.formula && (
                             <span className="text-[10px] ml-auto px-1 py-0.5 rounded bg-primary/10 text-primary font-mono">

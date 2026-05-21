@@ -9,6 +9,7 @@ import { sseManager } from '@/lib/sse';
 import { useStore } from '@/lib/store';
 import { endHeadlessSession } from '@/lib/session';
 import { toast } from 'sonner';
+import UuidLinkViewer from '@/components/uuid-link-viewer';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -87,11 +88,31 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Global click handler for @UUID links
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement).closest('.uuid-link');
+      if (link) {
+        e.preventDefault();
+        const uuid = link.getAttribute('data-uuid');
+        if (uuid) {
+          const fn = (window as unknown as Record<string, unknown>).__openUuidViewer as
+            | ((u: string) => void)
+            | undefined;
+          fn?.(uuid);
+        }
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
           {children}
+          <UuidLinkViewer />
           <Toaster position="bottom-right" richColors closeButton />
         </ThemeProvider>
       </TooltipProvider>

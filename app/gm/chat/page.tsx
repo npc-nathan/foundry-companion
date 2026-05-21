@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { rewriteRelayContent } from '@/lib/relay-html';
 import { toast } from 'sonner';
 import { Send, MessageSquare, Globe, Lock, Users } from 'lucide-react';
 
@@ -205,7 +206,7 @@ export default function GMChatPage() {
                         {msg.flavor}
                       </span>
                     )}
-                    <span className="text-sm whitespace-pre-wrap break-words">{msg.content}</span>
+                    <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: rewriteRelayContent(msg.content) }} />
                     {(() => {
                       const whisperStr = getWhisperLabel(msg.whisper);
                       return whisperStr ? (
