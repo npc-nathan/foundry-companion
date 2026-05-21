@@ -276,8 +276,13 @@ export default function GMChatPage() {
       const formData = new FormData();
       formData.append('file', file);
 
+      const { apiKey, clientId } = useStore.getState().config;
       const res = await fetch('/api/chat-upload', {
         method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'x-client-id': clientId || 'companion-app',
+        },
         body: formData,
       });
 

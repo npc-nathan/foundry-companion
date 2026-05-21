@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': req.headers.get('x-api-key') || '',
+          'x-client-id': req.headers.get('x-client-id') || 'companion-app',
         },
         body: JSON.stringify({
           fileData: base64,
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       path: foundryPath,
-      url: `/api/relay/download?path=${encodeURIComponent(foundryPath)}&source=data&format=base64`,
+      url: `/api/relay/download?path=${encodeURIComponent(foundryPath)}&source=data`,
       filename,
     });
   } catch (err) {
