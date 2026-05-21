@@ -1,0 +1,16 @@
+services:
+  foundry-companion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: foundry-companion
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - RELAY_URL=${RELAY_URL:?RELAY_URL is required — point to your Foundry VTT relay server}
+      - RELAY_API_KEY=${RELAY_API_KEY-}
+    env_file:
+      - path: .env
+        required: false
