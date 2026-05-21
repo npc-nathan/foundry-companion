@@ -51,6 +51,25 @@ async function apiPut<T = unknown>(path: string, body?: unknown, query?: Record<
   return res.json() as Promise<T>;
 }
 
+/** Upload file as base64 to Foundry data directory via relay */
+async function apiPostRaw<T = unknown>(
+  path: string,
+  body: unknown,
+  query?: Record<string, string>,
+) {
+  const base = getUrl(path);
+  const params = new URLSearchParams(query || {});
+  const qs = params.toString();
+  const url = qs ? `${base}?${qs}` : base;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: RELAY_HEADERS(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
 export const relay = {
   health: () =>
     fetch(`${getUrl('/api/health')}`, { headers: RELAY_HEADERS() }).then((r) => r.json()),
@@ -643,4 +662,28 @@ export const relay = {
       if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
       return r.text();
     }),
+
+  // ─── File Upload ──────────────────────────────────────────────
+
+  /** Upload a file to Foundry's data directory */
+  uploadFile: (params: {
+    fileData: string;
+    filename: string;
+    path?: string;
+    mimeType?: string;
+    overwrite?: boolean;
+  }) =>
+    apiPostRaw<{ type: string; requestId: string; success: boolean; path: string }>(
+      '/upload',
+      {
+        fileData: params.fileData,
+        mimeType: params.mimeType || 'application/octet-stream',
+        overwrite: params.overwrite ?? true,
+      },
+      {
+        path: params.path || 'worlds/npc-it/images/chat',
+        source: 'data',
+        filename: params.filename,
+      },
+    ),
 };

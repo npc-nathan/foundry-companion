@@ -8,9 +8,11 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { rewriteRelayContent } from '@/lib/relay-html';
 import { toast } from 'sonner';
-import { Send, MessageSquare, Globe, Lock, Hash, Users } from 'lucide-react';
+import { Send, MessageSquare, Globe, Lock, Hash, Users, Paperclip, ImageIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { UserList } from '@/components/chat/UserList';
+import { GifPicker } from '@/components/chat/GifPicker';
 import { useStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { ChatMode, ChatMessage, FoundryUser, Party } from '@/lib/chat-types';
@@ -98,6 +100,9 @@ export default function GMChatPage() {
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<ChatMode>('ic');
   const [whisperTarget, setWhisperTarget] = useState('');
+  const [gifPickerOpen, setGifPickerOpen] = useState(false);
+  const [fileUploading, setFileUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const prevDmRef = useRef<string | null>(null);
   const prevPartyRef = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -249,6 +254,53 @@ export default function GMChatPage() {
       handleSend();
     }
   };
+
+  const handleGifSelect = useCallback((imgHtml: string) => {
+    // Insert at cursor position or append
+    setMessage((prev) => {
+      const trimmed = prev.trimEnd();
+      return trimmed ? `${trimmed}\n${imgHtml}` : imgHtml;
+    });
+    setGifPickerOpen(false);
+  }, []);
+
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+
+    setFileUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/chat-upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Upload failed');
+
+      // Insert as HTML <img> tag using the download URL
+      const imgHtml = `<img src="${data.url}" alt="${data.filename}" class="chat-image" />`;
+      setMessage((prev) => {
+        const trimmed = prev.trimEnd();
+        return trimmed ? `${trimmed}\n${imgHtml}` : imgHtml;
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload file');
+    } finally {
+      setFileUploading(false);
+    }
+  }, []);
 
   const handleWhisperUser = (userId: string) => {
     setActiveUserDm(userId);
@@ -410,7 +462,7 @@ export default function GMChatPage() {
           </div>
 
           {/* Input area */}
-          <div className="border-t border-border p-3 shrink-0">
+          <div className="border-t border-border p-3 shrink-0 relative">
             <div className="flex items-center gap-2 mb-2">
               <div className="flex items-center gap-1">
                 <Button
@@ -466,7 +518,60 @@ export default function GMChatPage() {
                       : 'Whisper'}
                 </Button>
               </div>
+
+              <div className="flex items-center gap-1 ml-auto">
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span
+                      onClick={() => setGifPickerOpen((prev) => !prev)}
+                      className="h-7 w-7 inline-flex items-center justify-center cursor-pointer"
+                      aria-label="Add GIF"
+                    >
+                      <ImageIcon className="h-4 w-4 text-muted-foreground hover:text-foreground transition-colors" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    Add GIF
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        'h-7 w-7 inline-flex items-center justify-center cursor-pointer',
+                        fileUploading && 'opacity-50 pointer-events-none',
+                      )}
+                      aria-label="Upload file"
+                    >
+                      <Paperclip
+                        className={cn(
+                          'h-4 w-4 text-muted-foreground hover:text-foreground transition-colors',
+                          fileUploading && 'animate-pulse',
+                        )}
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    Upload image
+                  </TooltipContent>
+                </Tooltip>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </div>
             </div>
+
+            {/* GifPicker */}
+            <GifPicker
+              open={gifPickerOpen}
+              onClose={() => setGifPickerOpen(false)}
+              onSelect={handleGifSelect}
+            />
 
             <div className="flex gap-2">
               <Input
