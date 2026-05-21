@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
-import { Users, Cog, MessageSquare, Dice5, Dices, ScrollText, Swords, Bug, BookOpen, PuzzleIcon } from 'lucide-react';
+import { Users, Cog, MessageSquare, Dice5, Dices, ScrollText, Swords, Map, Trees, BookOpen, PuzzleIcon } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { sseManager } from '@/lib/sse';
 import { ThemeSwitcher } from '@/components/theme/ThemeSwitcher';
@@ -17,16 +17,16 @@ import {
 
 const gmNavItems = [
   { label: 'Dashboard', href: '/gm', icon: Cog },
-  { label: 'Actors', href: '/gm/actors', icon: Users },
-  { label: 'Scenes', href: '/gm/scenes', icon: Swords },
-  { label: 'Compendium', href: '/gm/compendium', icon: BookOpen },
   { label: 'Chat', href: '/gm/chat', icon: MessageSquare },
-  { label: 'Dice', href: '/gm/dice', icon: Dice5 },
-  { label: 'Macros', href: '/gm/macros', icon: PuzzleIcon },
+  { label: 'Canvas', href: '/gm/canvas', icon: Trees },
+  { label: 'Actors', href: '/gm/actors', icon: Users },
+  { label: 'Scenes', href: '/gm/scenes', icon: Map },
+  { label: 'Combat', href: '/gm/combat', icon: Swords },
   { label: 'Journals', href: '/gm/journals', icon: ScrollText },
   { label: 'Roll Tables', href: '/gm/rolltables', icon: Dices },
-  { label: 'Canvas', href: '/gm/canvas', icon: Swords },
-  { label: 'Logs', href: '/gm/logs', icon: Bug },
+  { label: 'Macros', href: '/gm/macros', icon: PuzzleIcon },
+  { label: 'Compendium', href: '/gm/compendium', icon: BookOpen },
+  { label: 'Dice', href: '/gm/dice', icon: Dice5 },
 ];
 
 const playerNavItems = [

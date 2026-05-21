@@ -12,7 +12,7 @@ describe('Sidebar', () => {
   it('renders GM section links', () => {
     render(<Sidebar />);
     // Key navigation items that should always be present
-    const links = ['Dashboard', 'Scenes', 'Canvas', 'Actors', 'Combat', 'Chat'];
+    const links = ['Dashboard', 'Scenes', 'Canvas', 'Actors', 'Compendium', 'Chat'];
     for (const link of links) {
       expect(screen.getByText(link)).toBeInTheDocument();
     }

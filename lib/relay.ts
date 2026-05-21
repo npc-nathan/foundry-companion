@@ -565,12 +565,13 @@ export const relay = {
                 return true;
               });
             if (entries.length === 0) continue;
+            const docType = pack.metadata.type;
             results[key] = entries.slice(0, limit).map(e => ({
               _id: e._id,
               name: e.name,
               type: e.type,
               img: e.img || null,
-              uuid: "Compendium." + key + "." + e.type + "." + e._id,
+              uuid: "Compendium." + key + "." + docType + "." + e._id,
               folder: e.folder || null,
               sort: e.sort || 0,
             }));

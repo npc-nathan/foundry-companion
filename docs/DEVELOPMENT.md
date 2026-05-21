@@ -99,23 +99,48 @@ git commit --no-verify -m "urgent: hotfix"
 
 Configured in `vitest.config.ts`. Uses jsdom environment, TypeScript, React Testing Library, and MSW.
 
+### Test count
+
+**198 tests across 20 files** (as of last audit).
+
 ### Test structure
 
 ```
-tests/
-├── relay-smoke.test.ts       # 16 API contract tests (needs dev server)
-├── sidebar.test.tsx           # 3 navigation tests
-├── CharacterSheet.test.tsx    # 2 character sheet render tests
-├── setup-test.test.tsx        # 2 setup verification tests
-├── setup.ts                  # Shared mocks (Next.js, shadcn)
-└── .audit-baseline.json      # NPM audit baseline snapshot
+foundry-companion/
+├── __tests__/
+│   ├── components/
+│   │   ├── CharacterSheet.expanded.test.tsx   # Full sheet tabs, HP, rests, skills
+│   │   ├── connection-gate.test.tsx            # Connection flow, form validation
+│   │   ├── ErrorBoundary.test.tsx              # Error catch, fallback, webhook
+│   │   ├── GifPicker.test.tsx                  # Search, loading, select/cancel
+│   │   ├── PartyManager.test.tsx               # Party CRUD, member management
+│   │   ├── system-item-viewer.test.tsx         # System item metadata rendering
+│   │   ├── UserAvatar.test.tsx                 # Avatar rendering, online status
+│   │   └── UserList.test.tsx                   # User list, whisper targets
+│   └── lib/
+│       ├── sse.test.ts                          # SSE manager: subscribe, reconnect
+│       └── utils.test.ts                        # Utility functions
+├── tests/
+│   ├── CharacterSheet.test.tsx                  # Basic sheet render (legacy)
+│   ├── env-debug.test.ts                        # Environment variable check
+│   ├── parse-macro-inputs.test.ts               # Macro parser edge cases
+│   ├── relay-html.test.ts                       # HTML sanitization
+│   ├── relay-smoke.test.ts                      # 16 API contract tests
+│   ├── setup-test.test.tsx                      # Setup verification
+│   ├── sidebar.test.tsx                         # Navigation rendering
+│   ├── store-auth.test.ts                       # Auth store: tokens, sessions
+│   ├── store.test.ts                            # Global store: config, UI, status
+│   ├── use-actor-data.test.ts                   # Actor data hook
+│   ├── setup.ts                                 # Shared mocks (Next, shadcn)
+│   └── .audit-baseline.json                     # NPM audit baseline snapshot
 ```
 
 ### Commands
 
 ```bash
-npm test                      # All tests (24 tests, ~3s)
-npm run test                  # Same
+npm test                      # All tests (198 tests, ~10s)
+npm run test -- --watch       # Watch mode for TDD
+npm run test -- --ui          # Vitest UI (browser dashboard)
 ```
 
 ### Running API contract tests
@@ -138,12 +163,28 @@ If the dev server is down, relay tests will timeout/fail. Component tests still 
 
 ```tsx
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Sidebar } from '@/components/sidebar';
 
-it('renders navigation links', () => {
+it('renders navigation links', async () => {
   render(<Sidebar />);
   expect(screen.getByText('Scenes')).toBeInTheDocument();
+  await userEvent.click(screen.getByText('Scenes'));
 });
+```
+
+**Mock patterns:**
+
+```tsx
+// Mock a component module
+vi.mock('@/components/some-component', () => ({
+  SomeComponent: () => <div data-testid="mocked" />,
+}));
+
+// Mock a hook
+vi.mock('@/lib/some-hook', () => ({
+  useSomeHook: () => ({ data: null, isLoading: false }),
+}));
 ```
 
 **Relay contract tests** hit the real API:
@@ -154,6 +195,13 @@ it('returns scenes list', async () => {
   expect(status).toBe(200);
 });
 ```
+
+### Environment variables for tests
+
+| Variable                    | Required for                             | Default |
+| --------------------------- | ---------------------------------------- | ------- |
+| `RELAY_API_KEY`             | Relay smoke tests (in `.env.test.local`) | —       |
+| `NEXT_PUBLIC_TENOR_API_KEY` | GifPicker tests                          | —       |
 
 ---
 

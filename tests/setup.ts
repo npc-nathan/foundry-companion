@@ -69,7 +69,7 @@ vi.mock('@/lib/relay', () => ({
   },
 }));
 
-// Mock zustand store
+// Mock zustand store — full shape matching StoreState interface
 const mockStore = {
   config: {
     apiKey: 'test-key',
@@ -78,8 +78,37 @@ const mockStore = {
     role: 'gm' as const,
     clientName: 'Test Client',
   },
+  status: {
+    connected: false,
+    connecting: false,
+    error: null,
+    relayUrl: '',
+  },
+  ui: {
+    themePreset: 'default',
+    sidebarOpen: true,
+    theme: 'dark' as const,
+  },
+  activeUserDm: null as string | null,
+  activePartyDm: null as { id: string; name: string; members: string[] } | null,
+  mutedUsers: [] as string[],
+  parties: [] as { id: string; name: string; members: string[] }[],
   setConfig: vi.fn(),
   reset: vi.fn(),
+  setConnected: vi.fn(),
+  setStatus: vi.fn(),
+  setError: vi.fn(),
+  toggleSidebar: vi.fn(),
+  toggleTheme: vi.fn(),
+  setThemePreset: vi.fn(),
+  setActiveUserDm: vi.fn(),
+  setActivePartyDm: vi.fn(),
+  setMutedUsers: vi.fn(),
+  toggleMuteUser: vi.fn(),
+  addParty: vi.fn(),
+  removeParty: vi.fn(),
+  addPartyMember: vi.fn(),
+  removePartyMember: vi.fn(),
   apiKey: 'test-key',
   clientId: 'test-client',
 };
@@ -87,6 +116,20 @@ const mockStore = {
 vi.mock('@/lib/store', () => ({
   useStore: (selector?: (state: typeof mockStore) => unknown) =>
     selector ? selector(mockStore) : mockStore,
+}));
+
+// Mock theme modules used by ThemeManager (rendered inside ThemeSwitcher in sidebar)
+vi.mock('@/lib/theme/registry', () => ({
+  getAllThemes: () => [],
+  getThemeById: vi.fn(),
+  exportThemeAsJson: vi.fn(),
+  deleteCustomTheme: vi.fn(),
+  importThemeFromFile: vi.fn(),
+  saveCustomTheme: vi.fn(),
+}));
+
+vi.mock('@/lib/theme/apply-theme', () => ({
+  applyTheme: vi.fn(),
 }));
 
 // Mock @/lib/sse

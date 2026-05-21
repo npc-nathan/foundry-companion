@@ -759,7 +759,7 @@ export default function CompendiumPage() {
   // ─── Filtered packs ──────────────────────────────────────
 
   const filterPacks = useCallback(
-    (pack: CompendiumPack) => {
+    (_pack: CompendiumPack) => {
       // Don't filter pack rows by search text — entry-level
       // filtering via filterEntries handles that. When search or
       // type tab is active, auto-expand shows all packs' entries.
@@ -954,8 +954,7 @@ export default function CompendiumPage() {
                           <div className="ml-4 border-l pl-1 space-y-0.5">
                             {packEntries.map((entry) => {
                               const uuid =
-                                entry.uuid ||
-                                `Compendium.${packId}.${entry.type}.${entry._id}`;
+                                `Compendium.${packId}.${pack.entityType.charAt(0).toUpperCase() + pack.entityType.slice(1)}.${entry._id}`;
                               return (
                                 <button
                                   key={entry._id}
