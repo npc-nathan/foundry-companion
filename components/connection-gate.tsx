@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { useStore } from '@/lib/store';
 import { sseManager } from '@/lib/sse';
-import { startHeadlessSession, endHeadlessSession } from '@/lib/session';
+
 
 interface RelayClient {
   clientId: string;
@@ -27,13 +27,8 @@ interface RelayClient {
   isOnline?: boolean;
 }
 
-type ConnectMode = 'api-key' | 'direct';
-
 export function ConnectionGate() {
   const { config, status, setConfig, setStatus, setConnected } = useStore();
-
-  // Connection mode state
-  const [connectMode, setConnectMode] = useState<ConnectMode>('api-key');
 
   // Shared state
   const [relayUrl, setRelayUrl] = useState('https://foundryrestapi.com');
@@ -47,14 +42,24 @@ export function ConnectionGate() {
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [step, setStep] = useState<'credentials' | 'client-select'>('credentials');
 
-  // Direct mode state
-  const [foundryUrl, setFoundryUrl] = useState('');
-  const [foundryUsername, setFoundryUsername] = useState('');
-  const [foundryPassword, setFoundryPassword] = useState('');
-  const [worldName, setWorldName] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // Env config from server (pre-populated from .env vars)
+  const [envConfig, setEnvConfig] = useState<{ relayUrl?: string; apiKey?: string } | null>(null);
 
   const hasAutoConnected = useRef(false);
+
+  // Fetch env config on mount — populates relay URL and API key if set in .env
+  useEffect(() => {
+    fetch('/api/env-config')
+      .then((r) => r.json())
+      .then((data) => {
+        setEnvConfig(data);
+        if (data.relayUrl) setRelayUrl(data.relayUrl);
+        if (data.apiKey) setApiKey(data.apiKey);
+      })
+      .catch(() => {
+        /* env config not available */
+      });
+  }, []);
 
   const handleConnect = useCallback(async () => {
     if (!relayUrl || !apiKey || !role) {
@@ -115,13 +120,23 @@ export function ConnectionGate() {
     }
   }, [relayUrl, apiKey, role, setStatus]);
 
+  // Auto-connect when env vars are set AND role is selected
+  useEffect(() => {
+    if (hasAutoConnected.current) return;
+    if (!envConfig?.relayUrl || !envConfig?.apiKey) return;
+    if (!role) return;
+    hasAutoConnected.current = true;
+    // This effect purposely triggers setState to auto-connect — this is the desired behavior
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    handleConnect();
+    // Only run when env config or role changes — not on handleConnect identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [envConfig?.relayUrl, envConfig?.apiKey, role]);
+
   // Auto-reconnect: fires when Zustand hydrates persisted config (which happens after mount)
   useEffect(() => {
     if (hasAutoConnected.current) return;
-    if (status.connected) {
-      // Already shown as connected from persistence — background verify
-      return;
-    }
+    if (status.connected) return;
     if (!config.relayUrl || !config.apiKey || !config.role) return;
     hasAutoConnected.current = true;
 
@@ -174,9 +189,16 @@ export function ConnectionGate() {
     };
 
     doAutoConnect();
-    // No dependencies — only runs once on mount via hasAutoConnected guard
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    config.relayUrl,
+    config.apiKey,
+    config.role,
+    config.clientId,
+    config.clientName,
+    // handleConnect intentionally omitted — it's stable and guarded by hasAutoConnected
+    setConfig,
+    setConnected,
+  ]);
 
   const handleFinalize = useCallback(() => {
     const client = clients.find((c) => c.clientId === selectedClient);
@@ -203,93 +225,10 @@ export function ConnectionGate() {
     sseManager.subscribe('hook', relayUrl, apiKey, client.clientId);
   }, [relayUrl, apiKey, role, selectedClient, clients, setConfig, setConnected]);
 
-  const handleDirectLogin = useCallback(async () => {
-    if (!relayUrl || !apiKey || !foundryUrl || !foundryUsername || !foundryPassword || !role) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setStatus('connecting');
-
-    try {
-      // Step 1: health check
-      const healthResp = await fetch('/api/relay/api/health', {
-        headers: { 'x-api-key': apiKey, 'x-client-id': 'companion-app' },
-      });
-      const health = await healthResp.json();
-      if (health.status !== 'ok') {
-        throw new Error('Relay health check failed');
-      }
-
-      // Step 2: start headless session
-      const result = await startHeadlessSession(
-        relayUrl,
-        apiKey,
-        foundryUrl,
-        foundryUsername,
-        foundryPassword,
-        worldName || undefined,
-      );
-
-      setSessionId(result.sessionId);
-
-      // Store auth in cookie
-      await fetch('/api/store-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ relayUrl, apiKey, clientId: result.clientId }),
-      });
-
-      setConfig({
-        relayUrl,
-        apiKey,
-        clientId: result.clientId,
-        clientName: `${foundryUsername}'s Session`,
-        role: role as 'gm' | 'player',
-        sessionId: result.sessionId,
-      });
-      setConnected(true);
-
-      // Subscribe to real-time SSE channels
-      sseManager.subscribe('encounter', relayUrl, apiKey, result.clientId);
-      sseManager.subscribe('chat', relayUrl, apiKey, result.clientId);
-      sseManager.subscribe('scene', relayUrl, apiKey, result.clientId);
-      sseManager.subscribe('rolls', relayUrl, apiKey, result.clientId);
-      sseManager.subscribe('hook', relayUrl, apiKey, result.clientId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Direct login failed');
-      setStatus('disconnected');
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    relayUrl,
-    apiKey,
-    foundryUrl,
-    foundryUsername,
-    foundryPassword,
-    worldName,
-    role,
-    setConfig,
-    setConnected,
-    setStatus,
-  ]);
-
   const handleBack = useCallback(() => {
     setStep('credentials');
     setError(null);
   }, []);
-
-  // Cleanup headless session on unmount
-  useEffect(() => {
-    return () => {
-      if (sessionId && apiKey) {
-        endHeadlessSession(apiKey, sessionId).catch(() => {});
-      }
-    };
-  }, [sessionId, apiKey]);
 
   // Client select step — used by API Key mode only
   if (step === 'client-select') {
@@ -352,150 +291,51 @@ export function ConnectionGate() {
           <CardDescription>Choose how to connect to your Foundry VTT world</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Tab bar */}
-          <div className="flex border-b border-border">
-            <button
-              onClick={() => {
-                setConnectMode('api-key');
-                setError(null);
-              }}
-              className={`flex-1 pb-2 text-sm font-medium transition-colors ${
-                connectMode === 'api-key'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              API Key
-            </button>
-            <button
-              onClick={() => {
-                setConnectMode('direct');
-                setError(null);
-              }}
-              className={`flex-1 pb-2 text-sm font-medium transition-colors ${
-                connectMode === 'direct'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Direct Login
-            </button>
-          </div>
-
           {/* Shared: Relay URL + API Key + Role */}
-          <div className="space-y-2">
-            <Label htmlFor="relay-url">Relay URL</Label>
-            <Input
-              id="relay-url"
-              type="url"
-              value={relayUrl}
-              onChange={(e) => setRelayUrl(e.target.value)}
-              placeholder="https://foundryrestapi.com"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="api-key">API Key</Label>
-            <Input
-              id="api-key"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your API key"
-            />
-          </div>
-
-          {/* API Key mode: world selection flow */}
-          {connectMode === 'api-key' && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select value={role} onValueChange={(v) => v && setRole(v)}>
-                  <SelectTrigger id="role">
-                    <SelectValue placeholder="Select a role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gm">Game Master</SelectItem>
-                    <SelectItem value="player">Player</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
-              <Button onClick={handleConnect} className="w-full" disabled={loading}>
-                {loading ? 'Connecting...' : 'Connect to Foundry'}
-              </Button>
-            </>
+          {!envConfig?.relayUrl && (
+            <div className="space-y-2">
+              <Label htmlFor="relay-url">Relay URL</Label>
+              <Input
+                id="relay-url"
+                type="url"
+                value={relayUrl}
+                onChange={(e) => setRelayUrl(e.target.value)}
+                placeholder="https://foundryrestapi.com"
+              />
+            </div>
           )}
 
-          {/* Direct Login mode: Foundry credentials */}
-          {connectMode === 'direct' && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="foundry-url">Foundry URL</Label>
-                <Input
-                  id="foundry-url"
-                  type="url"
-                  value={foundryUrl}
-                  onChange={(e) => setFoundryUrl(e.target.value)}
-                  placeholder="http://localhost:30000"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="foundry-username">Username</Label>
-                <Input
-                  id="foundry-username"
-                  type="text"
-                  value={foundryUsername}
-                  onChange={(e) => setFoundryUsername(e.target.value)}
-                  placeholder="Enter your Foundry username"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="foundry-password">Password</Label>
-                <Input
-                  id="foundry-password"
-                  type="password"
-                  value={foundryPassword}
-                  onChange={(e) => setFoundryPassword(e.target.value)}
-                  placeholder="Enter your Foundry password"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="world-name">World Name (optional)</Label>
-                <Input
-                  id="world-name"
-                  type="text"
-                  value={worldName}
-                  onChange={(e) => setWorldName(e.target.value)}
-                  placeholder="Leave blank to use default world"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role-direct">Role</Label>
-                <Select value={role} onValueChange={(v) => v && setRole(v)}>
-                  <SelectTrigger id="role-direct">
-                    <SelectValue placeholder="Select a role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gm">Game Master</SelectItem>
-                    <SelectItem value="player">Player</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
-              <Button onClick={handleDirectLogin} className="w-full" disabled={loading}>
-                {loading ? 'Connecting...' : 'Connect to Foundry'}
-              </Button>
-            </>
+          {!envConfig?.apiKey && (
+            <div className="space-y-2">
+              <Label htmlFor="api-key">API Key</Label>
+              <Input
+                id="api-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your API key"
+              />
+            </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="role">Role</Label>
+            <Select value={role} onValueChange={(v) => v && setRole(v)}>
+              <SelectTrigger id="role">
+                <SelectValue placeholder="Select a role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="gm">Game Master</SelectItem>
+                <SelectItem value="player">Player</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <Button onClick={handleConnect} className="w-full" disabled={loading}>
+            {loading ? 'Connecting...' : 'Connect to Foundry'}
+          </Button>
 
           <p className="text-xs text-center text-muted-foreground mt-2">
             Powered by the Foundry Rest API Relay{' '}

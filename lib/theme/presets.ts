@@ -889,7 +889,8 @@ export const presetThemes: Record<string, ThemeDefinition> = {
 
 /** Get a preset theme by ID */
 export function getPresetTheme(id: string): ThemeDefinition | undefined {
-  return presetThemes[id];
+  if (Object.hasOwn(presetThemes, id)) return presetThemes[id];
+  return undefined;
 }
 
 /** List all preset theme IDs */

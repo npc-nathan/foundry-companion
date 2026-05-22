@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const RELAY_URL = process.env.RELAY_URL || 'http://localhost:3010';
-
 /**
  * POST /api/chat-upload
  *
@@ -27,9 +25,14 @@ export async function POST(req: NextRequest) {
 
     const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
+    // Use env var if set, otherwise fall back to request header (from browser),
+    // then default to localhost:3010
+    const relayUrl =
+      process.env.RELAY_URL || req.headers.get('x-relay-url') || 'http://localhost:3010';
+
     // Upload to Foundry via relay
     const relayRes = await fetch(
-      `${RELAY_URL}/upload?path=worlds/npc-it/images/chat&source=data&filename=${encodeURIComponent(
+      `${relayUrl}/upload?path=worlds/npc-it/images/chat&source=data&filename=${encodeURIComponent(
         filename,
       )}`,
       {
